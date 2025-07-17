@@ -3,7 +3,8 @@ import pandas as pd
 from datetime import datetime
 
 from self_01_api_analyzer import analyze_api_performance
-from self_00_01_constants import DEFAULT_LOG_DIR, DEFAULT_SUCCESS_CODES, DEFAULT_SLOW_THRESHOLD, DEFAULT_COLUMN_API
+from self_00_01_constants import DEFAULT_LOG_DIR, DEFAULT_SUCCESS_CODES, DEFAULT_SLOW_THRESHOLD, DEFAULT_COLUMN_API, \
+    DEFAULT_START_DATE, DEFAULT_END_DATE
 from self_06_performance_stability_analyzer import analyze_service_stability
 from self_07_generate_summary_report_analyzer import generate_summary_report
 from self_08_ip_analyzer import analyze_ip_sources
@@ -43,7 +44,7 @@ def main():
 
         # 处理日志文件
         temp_csv = os.path.join(temp_dir, "processed_logs.csv")
-        total_records = process_log_files(log_files, temp_csv)
+        total_records = process_log_files(log_files, temp_csv, start_date=DEFAULT_START_DATE, end_date=DEFAULT_END_DATE)
 
         # 初始化输出数据
         outputs = {

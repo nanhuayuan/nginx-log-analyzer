@@ -1,13 +1,8 @@
 from openpyxl.styles import PatternFill
 import os
 
-#DEFAULT_LOG_DIR = "../data/demo/自研Ng2025.05.09日志-样例"
+DEFAULT_LOG_DIR = "../data/demo/自研Ng2025.05.09日志-样例"
 #DEFAULT_LOG_DIR = "D:/temp/gaokao0625"
-#DEFAULT_LOG_DIR = "D:/temp/0701"
-DEFAULT_LOG_DIR = "../data/demo/底座Nginx2025.04.23-样例" # -样例
-#DEFAULT_LOG_DIR = "。。/temp/底座Ng2025-05-16压测日志" # -样例
-#DEFAULT_LOG_DIR = "D:/temp/底座Ng2025-05-20日志" # -样例
-DEFAULT_底座_LOG_DIR = "D:/temp/底座Nginx2025.04.23"  # 新增底座日志目录常量
 DEFAULT_CHUNK_SIZE = 50000  # 减小chunk大小以优化内存使用
 DEFAULT_BATCH_SIZE = 5000   # 减小批处理大小
 DEFAULT_SLOW_THRESHOLD = 3 # 慢接口时间阈值

@@ -527,7 +527,7 @@ def process_log_file_generator(file_path, log_type=LOG_TYPE_AUTO, start_date=Non
             row_data = parse_log_line(line, source_file, app_name, log_type)
             if row_data:
                 # 检查日期范围过滤
-                if not is_date_in_range(row_data.get('date'), start_date, end_date):
+                if not is_date_in_range(row_data.get('raw_time'), start_date, end_date):
                     filtered_count += 1
                     continue
 
