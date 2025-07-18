@@ -4,12 +4,12 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from datetime import datetime
+from collections import defaultdict
 
 from self_00_04_excel_processor import format_excel_sheet, add_dataframe_to_excel_with_grouped_headers
 from self_00_01_constants import DEFAULT_CHUNK_SIZE, DEFAULT_SLOW_THRESHOLD, DEFAULT_SLOW_REQUESTS_THRESHOLD, \
     TIME_METRICS, SIZE_METRICS, HIGHLIGHT_FILL
 from self_00_02_utils import log_info, get_distribution_stats, calculate_time_percentages
-import random
 
 # 尝试导入scipy，如果失败则使用近似计算
 try:
@@ -19,15 +19,223 @@ except ImportError:
     SCIPY_AVAILABLE = False
 
 
+class StreamingApiAnalyzer:
+    """流式API性能分析器 - 高效处理大数据集"""
+    
+    def __init__(self, slow_threshold=DEFAULT_SLOW_THRESHOLD):
+        self.slow_threshold = slow_threshold
+        self.api_stats = defaultdict(lambda: {
+            'total_requests': 0,
+            'success_requests': 0,
+            'slow_requests': 0,
+            'app_name': '',
+            'service_name': '',
+            # 流式统计字段
+            'request_time_sum': 0.0,
+            'request_time_sum_sq': 0.0,
+            'request_time_count': 0,
+            'request_time_values': [],  # 仅保存少量样本用于分位数
+            
+            # 阶段时间统计
+            'backend_connect_sum': 0.0,
+            'backend_process_sum': 0.0,
+            'backend_transfer_sum': 0.0,
+            'nginx_transfer_sum': 0.0,
+            'backend_connect_count': 0,
+            'backend_process_count': 0,
+            'backend_transfer_count': 0,
+            'nginx_transfer_count': 0,
+            
+            # 大小统计
+            'body_size_sum': 0.0,
+            'body_size_count': 0,
+            'body_size_values': [],
+            'bytes_size_sum': 0.0,
+            'bytes_size_count': 0,
+            'bytes_size_values': [],
+            
+            # 性能指标
+            'transfer_speed_sum': 0.0,
+            'transfer_speed_count': 0,
+            'efficiency_sum': 0.0,
+            'efficiency_count': 0
+        })
+        
+        # 全局统计
+        self.global_stats = {
+            'total_requests': 0,
+            'success_requests': 0,
+            'slow_requests': 0,
+            'phase_times': defaultdict(float),
+            'global_samples': {
+                'response_times': [],
+                'body_sizes': [],
+                'bytes_sizes': [],
+                'transfer_speeds': [],
+                'efficiency_scores': []
+            }
+        }
+        
+        # 采样配置
+        self.MAX_SAMPLES_PER_API = 1000  # 每个API最多保存1000个样本
+        self.MAX_GLOBAL_SAMPLES = 10000  # 全局最多保存10000个样本
+    
+    def process_chunk(self, chunk, field_mapping, success_codes):
+        """处理单个数据块"""
+        chunk_rows = len(chunk)
+        self.global_stats['total_requests'] += chunk_rows
+        
+        # 筛选成功请求
+        successful_requests = chunk[chunk[field_mapping['status']].astype(str).isin(success_codes)]
+        success_count = len(successful_requests)
+        self.global_stats['success_requests'] += success_count
+        
+        if success_count == 0:
+            return
+        
+        # 预处理数据 - 向量化转换
+        numeric_data = self._preprocess_numeric_data(successful_requests, field_mapping)
+        
+        # 按API分组并批量处理
+        for api, group_data in numeric_data.groupby('uri'):
+            self._process_api_group(api, group_data, field_mapping)
+    
+    def _preprocess_numeric_data(self, chunk, field_mapping):
+        """预处理数字数据 - 向量化操作"""
+        # 选择需要的列
+        cols_to_process = {
+            'uri': field_mapping['uri'],
+            'app': field_mapping['app'],
+            'service': field_mapping['service'],
+            'request_time': field_mapping['request_time'],
+            'backend_connect': field_mapping.get('backend_connect_phase', ''),
+            'backend_process': field_mapping.get('backend_process_phase', ''),
+            'backend_transfer': field_mapping.get('backend_transfer_phase', ''),
+            'nginx_transfer': field_mapping.get('nginx_transfer_phase', ''),
+            'body_size': field_mapping['body_bytes_kb'],
+            'bytes_size': field_mapping['bytes_sent_kb'],
+            'transfer_speed': field_mapping.get('response_transfer_speed', ''),
+            'efficiency': field_mapping.get('processing_efficiency_index', '')
+        }
+        
+        # 创建数据副本
+        data = {}
+        for key, col in cols_to_process.items():
+            if col and col in chunk.columns:
+                if key in ['uri', 'app', 'service']:
+                    data[key] = chunk[col]
+                else:
+                    data[key] = pd.to_numeric(chunk[col], errors='coerce')
+            else:
+                data[key] = pd.Series([None] * len(chunk))
+        
+        return pd.DataFrame(data)
+    
+    def _process_api_group(self, api, group_data, field_mapping):
+        """处理单个API组的数据"""
+        group_size = len(group_data)
+        stats = self.api_stats[api]
+        
+        # 更新基础统计
+        stats['total_requests'] += group_size
+        stats['success_requests'] += group_size
+        
+        # 设置应用和服务名称
+        if not stats['app_name'] and not group_data['app'].isna().all():
+            stats['app_name'] = group_data['app'].iloc[0]
+        if not stats['service_name'] and not group_data['service'].isna().all():
+            stats['service_name'] = group_data['service'].iloc[0]
+        
+        # 处理请求时间
+        request_times = group_data['request_time'].dropna()
+        if len(request_times) > 0:
+            # 更新流式统计
+            stats['request_time_sum'] += request_times.sum()
+            stats['request_time_sum_sq'] += (request_times ** 2).sum()
+            stats['request_time_count'] += len(request_times)
+            
+            # 采样保存用于分位数计算
+            self._update_samples(stats['request_time_values'], request_times, self.MAX_SAMPLES_PER_API)
+            self._update_samples(self.global_stats['global_samples']['response_times'], request_times, self.MAX_GLOBAL_SAMPLES)
+            
+            # 统计慢请求
+            slow_count = (request_times > self.slow_threshold).sum()
+            stats['slow_requests'] += slow_count
+            self.global_stats['slow_requests'] += slow_count
+        
+        # 处理阶段时间
+        self._update_phase_stats(stats, group_data, 'backend_connect')
+        self._update_phase_stats(stats, group_data, 'backend_process')
+        self._update_phase_stats(stats, group_data, 'backend_transfer')
+        self._update_phase_stats(stats, group_data, 'nginx_transfer')
+        
+        # 处理大小统计
+        self._update_size_stats(stats, group_data, 'body_size')
+        self._update_size_stats(stats, group_data, 'bytes_size')
+        
+        # 处理性能指标
+        self._update_performance_stats(stats, group_data)
+    
+    def _update_samples(self, sample_list, new_data, max_size):
+        """更新采样数据"""
+        new_samples = new_data.tolist()
+        sample_list.extend(new_samples)
+        
+        # 如果超过最大大小，随机采样
+        if len(sample_list) > max_size:
+            import random
+            sample_list[:] = random.sample(sample_list, max_size)
+    
+    def _update_phase_stats(self, stats, group_data, phase_key):
+        """更新阶段统计"""
+        phase_data = group_data[phase_key].dropna()
+        if len(phase_data) > 0:
+            stats[f'{phase_key}_sum'] += phase_data.sum()
+            stats[f'{phase_key}_count'] += len(phase_data)
+            self.global_stats['phase_times'][phase_key] += phase_data.sum()
+    
+    def _update_size_stats(self, stats, group_data, size_key):
+        """更新大小统计"""
+        size_data = group_data[size_key].dropna()
+        if len(size_data) > 0:
+            stats[f'{size_key}_sum'] += size_data.sum()
+            stats[f'{size_key}_count'] += len(size_data)
+            
+            # 采样保存
+            self._update_samples(stats[f'{size_key}_values'], size_data, self.MAX_SAMPLES_PER_API)
+            
+            # 更新全局样本
+            if size_key == 'body_size':
+                self._update_samples(self.global_stats['global_samples']['body_sizes'], size_data, self.MAX_GLOBAL_SAMPLES)
+            elif size_key == 'bytes_size':
+                self._update_samples(self.global_stats['global_samples']['bytes_sizes'], size_data, self.MAX_GLOBAL_SAMPLES)
+    
+    def _update_performance_stats(self, stats, group_data):
+        """更新性能统计"""
+        # 传输速度
+        speed_data = group_data['transfer_speed'].dropna()
+        if len(speed_data) > 0:
+            stats['transfer_speed_sum'] += speed_data.sum()
+            stats['transfer_speed_count'] += len(speed_data)
+            self._update_samples(self.global_stats['global_samples']['transfer_speeds'], speed_data, self.MAX_GLOBAL_SAMPLES)
+        
+        # 效率指标
+        efficiency_data = group_data['efficiency'].dropna()
+        if len(efficiency_data) > 0:
+            stats['efficiency_sum'] += efficiency_data.sum()
+            stats['efficiency_count'] += len(efficiency_data)
+            self._update_samples(self.global_stats['global_samples']['efficiency_scores'], efficiency_data, self.MAX_GLOBAL_SAMPLES)
+
+
 def analyze_api_performance(csv_path, output_path, success_codes=None, slow_threshold=DEFAULT_SLOW_THRESHOLD):
-    """分析API性能数据并生成Excel报告"""
+    """分析API性能数据并生成Excel报告 - 优化版本"""
     log_info(f"开始分析API性能数据: {csv_path}", show_memory=True)
 
     if success_codes is None:
         from self_00_01_constants import DEFAULT_SUCCESS_CODES
         success_codes = DEFAULT_SUCCESS_CODES
 
-    # 优化后的字段映射
+    # 字段映射
     field_mapping = {
         'uri': 'request_full_uri',
         'app': 'application_name',
@@ -37,150 +245,47 @@ def analyze_api_performance(csv_path, output_path, success_codes=None, slow_thre
         'header_time': 'upstream_header_time',
         'connect_time': 'upstream_connect_time',
         'response_time': 'upstream_response_time',
-        'body_bytes_kb': 'response_body_size_kb',  # 已转换为KB
-        'bytes_sent_kb': 'total_bytes_sent_kb',  # 已转换为KB
-        # 新增的阶段分析字段
+        'body_bytes_kb': 'response_body_size_kb',
+        'bytes_sent_kb': 'total_bytes_sent_kb',
         'backend_connect_phase': 'backend_connect_phase',
         'backend_process_phase': 'backend_process_phase',
         'backend_transfer_phase': 'backend_transfer_phase',
         'nginx_transfer_phase': 'nginx_transfer_phase',
-        # 新增的性能分析字段
-        'backend_efficiency': 'backend_efficiency',
-        'network_overhead': 'network_overhead',
-        'transfer_ratio': 'transfer_ratio',
         'response_transfer_speed': 'response_transfer_speed',
-        'total_transfer_speed': 'total_transfer_speed',
         'processing_efficiency_index': 'processing_efficiency_index'
     }
 
-    chunk_size = max(DEFAULT_CHUNK_SIZE // 2, 10000)  # 减小chunk大小
-    api_stats = {}
-    total_requests = 0
-    success_requests = 0
-    total_slow_requests = 0
+    # 创建流式分析器
+    analyzer = StreamingApiAnalyzer(slow_threshold)
     
-    # 使用采样策略减少内存使用
-    SAMPLE_SIZE = 100000  # 最多采雇10万个样本
-    response_times = []
-    body_sizes_kb = []
-    bytes_sizes_kb = []
-    transfer_speeds = []
-    efficiency_scores = []
-
-    # 阶段时间统计
-    phase_times = {
-        'backend_connect_phase': 0,
-        'backend_process_phase': 0,
-        'backend_transfer_phase': 0,
-        'nginx_transfer_phase': 0
-    }
-
+    # 处理参数
+    chunk_size = max(DEFAULT_CHUNK_SIZE, 50000)  # 增加chunk大小以提高效率
     success_codes = [str(code) for code in success_codes]
     chunks_processed = 0
     start_time = datetime.now()
 
-    for chunk in pd.read_csv(csv_path, chunksize=chunk_size):
-        chunks_processed += 1
-        chunk_rows = len(chunk)
-        total_requests += chunk_rows
-
-        # 按API分组统计请求总数
-        for api, group in chunk.groupby(field_mapping['uri']):
-            if api not in api_stats:
-                initialize_api_stats(api_stats, api, group, field_mapping)
-            api_stats[api]['total_requests'] += len(group)
-
-        # 筛选成功请求
-        successful_requests = chunk[chunk[field_mapping['status']].astype(str).isin(success_codes)]
-        success_count = len(successful_requests)
-        success_requests += success_count
-
-        if success_count > 0:
-            # 处理响应时间（使用采样）
-            request_times = pd.to_numeric(successful_requests[field_mapping['request_time']], errors='coerce')
-            valid_times = request_times.dropna()
+    # 流式处理数据
+    try:
+        for chunk in pd.read_csv(csv_path, chunksize=chunk_size):
+            chunks_processed += 1
             
-            # 采样策略：如果数据量超过限制，随机采样
-            if len(response_times) + len(valid_times) > SAMPLE_SIZE:
-                remaining_slots = SAMPLE_SIZE - len(response_times)
-                if remaining_slots > 0:
-                    sample_indices = random.sample(range(len(valid_times)), min(remaining_slots, len(valid_times)))
-                    sample_times = valid_times.iloc[sample_indices]
-                    response_times.extend(sample_times.tolist())
-            else:
-                response_times.extend(valid_times.tolist())
+            # 处理数据块
+            analyzer.process_chunk(chunk, field_mapping, success_codes)
+            
+            # 定期报告进度
+            if chunks_processed % 10 == 0:
+                elapsed = (datetime.now() - start_time).total_seconds()
+                log_info(f"已处理 {chunks_processed} 个数据块, {analyzer.global_stats['total_requests']} 条记录, 耗时: {elapsed:.2f}秒", show_memory=True)
+                gc.collect()
 
-            # 统计慢请求
-            chunk_slow_requests = (valid_times > slow_threshold).sum()
-            total_slow_requests += chunk_slow_requests
+    except Exception as e:
+        log_info(f"数据处理出错: {e}")
+        raise
 
-            # 统计阶段时间
-            for phase_key, phase_field in phase_times.items():
-                if phase_field in successful_requests.columns:
-                    phase_data = pd.to_numeric(successful_requests[phase_field], errors='coerce')
-                    phase_times[phase_key] += phase_data.dropna().sum()
-
-            # 统计数据大小 (使用采样)
-            body_data_kb = pd.to_numeric(successful_requests[field_mapping['body_bytes_kb']], errors='coerce').dropna()
-            if len(body_sizes_kb) + len(body_data_kb) > SAMPLE_SIZE:
-                remaining_slots = SAMPLE_SIZE - len(body_sizes_kb)
-                if remaining_slots > 0:
-                    sample_indices = random.sample(range(len(body_data_kb)), min(remaining_slots, len(body_data_kb)))
-                    sample_body = body_data_kb.iloc[sample_indices]
-                    body_sizes_kb.extend(sample_body.tolist())
-            else:
-                body_sizes_kb.extend(body_data_kb.tolist())
-
-            bytes_data_kb = pd.to_numeric(successful_requests[field_mapping['bytes_sent_kb']], errors='coerce').dropna()
-            if len(bytes_sizes_kb) + len(bytes_data_kb) > SAMPLE_SIZE:
-                remaining_slots = SAMPLE_SIZE - len(bytes_sizes_kb)
-                if remaining_slots > 0:
-                    sample_indices = random.sample(range(len(bytes_data_kb)), min(remaining_slots, len(bytes_data_kb)))
-                    sample_bytes = bytes_data_kb.iloc[sample_indices]
-                    bytes_sizes_kb.extend(sample_bytes.tolist())
-            else:
-                bytes_sizes_kb.extend(bytes_data_kb.tolist())
-
-            # 统计传输速度（使用采样）
-            if field_mapping['response_transfer_speed'] in successful_requests.columns:
-                speed_data = pd.to_numeric(successful_requests[field_mapping['response_transfer_speed']],
-                                           errors='coerce').dropna()
-                if len(transfer_speeds) + len(speed_data) > SAMPLE_SIZE:
-                    remaining_slots = SAMPLE_SIZE - len(transfer_speeds)
-                    if remaining_slots > 0:
-                        sample_indices = random.sample(range(len(speed_data)), min(remaining_slots, len(speed_data)))
-                        sample_speed = speed_data.iloc[sample_indices]
-                        transfer_speeds.extend(sample_speed.tolist())
-                else:
-                    transfer_speeds.extend(speed_data.tolist())
-
-            # 统计效率指标（使用采样）
-            if field_mapping['processing_efficiency_index'] in successful_requests.columns:
-                efficiency_data = pd.to_numeric(successful_requests[field_mapping['processing_efficiency_index']],
-                                                errors='coerce').dropna()
-                if len(efficiency_scores) + len(efficiency_data) > SAMPLE_SIZE:
-                    remaining_slots = SAMPLE_SIZE - len(efficiency_scores)
-                    if remaining_slots > 0:
-                        sample_indices = random.sample(range(len(efficiency_data)), min(remaining_slots, len(efficiency_data)))
-                        sample_efficiency = efficiency_data.iloc[sample_indices]
-                        efficiency_scores.extend(sample_efficiency.tolist())
-                else:
-                    efficiency_scores.extend(efficiency_data.tolist())
-
-            # 按API分组处理详细统计
-            for api, group in successful_requests.groupby(field_mapping['uri']):
-                process_api_group(api_stats, api, group, slow_threshold, field_mapping)
-
-        if chunks_processed % 5 == 0:
-            elapsed = (datetime.now() - start_time).total_seconds()
-            log_info(f"已处理 {chunks_processed} 个数据块, {total_requests} 条记录, 耗时: {elapsed:.2f}秒", show_memory=True)
-            del chunk
-            gc.collect()
-
-    log_info(f"数据处理完成，共处理 {total_requests} 条请求, 成功请求 {success_requests} 条", show_memory=True)
+    log_info(f"数据处理完成，共处理 {analyzer.global_stats['total_requests']} 条请求, 成功请求 {analyzer.global_stats['success_requests']} 条", show_memory=True)
 
     # 生成统计报告
-    results = generate_api_statistics(api_stats, success_requests, total_slow_requests)
+    results = generate_optimized_api_statistics(analyzer)
 
     if results:
         results_df = pd.DataFrame(results)
@@ -188,11 +293,7 @@ def analyze_api_performance(csv_path, output_path, success_codes=None, slow_thre
             results_df = results_df.sort_values(by='平均请求时长(秒)', ascending=False)
 
         # 创建Excel报告
-        create_api_performance_excel(
-            results_df, output_path, total_requests, success_requests,
-            total_slow_requests, response_times, body_sizes_kb, bytes_sizes_kb,
-            phase_times, transfer_speeds, efficiency_scores
-        )
+        create_optimized_api_performance_excel(results_df, output_path, analyzer)
 
         log_info(f"API性能分析报告已生成: {output_path}", show_memory=True)
         return results_df.head(5)
@@ -201,10 +302,11 @@ def analyze_api_performance(csv_path, output_path, success_codes=None, slow_thre
         return pd.DataFrame()
 
 
-def initialize_api_stats(api_stats, api, group, field_mapping):
-    """初始化API统计数据结构"""
-    if api in api_stats:
-        return
+# 注释掉旧的函数，保留以防需要参考
+# def initialize_api_stats(api_stats, api, group, field_mapping):
+#     """初始化API统计数据结构"""
+#     if api in api_stats:
+#         return
 
     app_name = group[field_mapping['app']].iloc[0] if not group[field_mapping['app']].empty else ""
     service_name = group[field_mapping['service']].iloc[0] if not group[field_mapping['service']].empty else ""
@@ -252,7 +354,7 @@ def initialize_api_stats(api_stats, api, group, field_mapping):
         api_stats[api][f'{field}_sum_sq'] = 0.0
 
 
-def process_api_group(api_stats, api, group, slow_threshold, field_mapping):
+# def process_api_group(api_stats, api, group, slow_threshold, field_mapping):
     """处理单个API组的详细统计"""
     if api not in api_stats:
         initialize_api_stats(api_stats, api, group, field_mapping)
@@ -364,218 +466,166 @@ def update_incremental_stats(stats_dict, field, series):
         stats_dict[sum_sq_field] += sum_sq_val
 
 
-def generate_api_statistics(api_stats, success_requests, total_slow_requests):
-    """生成API统计报告"""
+def generate_optimized_api_statistics(analyzer):
+    """生成优化的API统计报告"""
     results = []
-    processed_apis = 0
-
+    api_stats = analyzer.api_stats
+    global_stats = analyzer.global_stats
+    
+    def safe_percentile(values, percentile):
+        """安全的百分位数计算"""
+        if not values or len(values) == 0:
+            return 0
+        return round(np.percentile(values, percentile), 3)
+    
+    def safe_avg(total, count):
+        """安全的平均值计算"""
+        return round(total / count, 3) if count > 0 else 0
+    
     for api, stats in api_stats.items():
-        # 使用统计量计算百分位数（近似值）
-        def calculate_percentile_from_stats(count, sum_val, sum_sq, percentile):
-            if count == 0:
-                return 0
-            # 使用正态分布近似百分位数
-            mean = sum_val / count
-            variance = max(0, (sum_sq / count) - (mean ** 2))
-            std = variance ** 0.5
-            
-            # 正态分布的百分位数近似
-            if SCIPY_AVAILABLE:
-                z_score = norm.ppf(percentile / 100)
-                return max(0, mean + z_score * std)
-            else:
-                # 简单的线性插值近似（当scipy不可用时）
-                if percentile <= 50:
-                    return max(0, mean - std * (50 - percentile) / 25)
-                else:
-                    return max(0, mean + std * (percentile - 50) / 25)
-
-        # 计算各个时间指标的百分位数
-        time_fields = ['request_time', 'connect_time', 'header_time', 'response_time',
-                      'backend_connect_phase', 'backend_process_phase', 
-                      'backend_transfer_phase', 'nginx_transfer_phase']
+        # 计算基础指标
+        total_requests = stats['total_requests']
+        success_requests = stats['success_requests']
+        slow_requests = stats['slow_requests']
         
-        time_percentiles = {}
-        for field in time_fields:
-            count = stats.get(f'{field}_count', 0)
-            sum_val = stats.get(f'{field}_sum', 0)
-            sum_sq = stats.get(f'{field}_sum_sq', 0)
-            
-            if count > 0:
-                time_percentiles[field] = {
-                    'median': calculate_percentile_from_stats(count, sum_val, sum_sq, 50),
-                    'p90': calculate_percentile_from_stats(count, sum_val, sum_sq, 90),
-                    'p95': calculate_percentile_from_stats(count, sum_val, sum_sq, 95),
-                    'p99': calculate_percentile_from_stats(count, sum_val, sum_sq, 99)
-                }
-            else:
-                time_percentiles[field] = {'median': 0, 'p90': 0, 'p95': 0, 'p99': 0}
-
-        # 计算大小指标的百分位数
-        size_percentiles = {}
-        for field in ['body_kb', 'bytes_kb']:
-            count = stats.get(f'{field}_count', 0)
-            sum_val = stats.get(f'{field}_sum', 0)
-            sum_sq = stats.get(f'{field}_sum_sq', 0)
-            
-            if count > 0:
-                size_percentiles[field] = {
-                    'median': calculate_percentile_from_stats(count, sum_val, sum_sq, 50),
-                    'p90': calculate_percentile_from_stats(count, sum_val, sum_sq, 90),
-                    'p95': calculate_percentile_from_stats(count, sum_val, sum_sq, 95),
-                    'p99': calculate_percentile_from_stats(count, sum_val, sum_sq, 99)
-                }
-            else:
-                size_percentiles[field] = {'median': 0, 'p90': 0, 'p95': 0, 'p99': 0}
-
-        # 计算性能指标的百分位数  
-        transfer_speed_avg = 0
-        efficiency_avg = 0
-        if stats.get('transfer_speed_count', 0) > 0:
-            transfer_speed_avg = stats['transfer_speed_sum'] / stats['transfer_speed_count']
-        if stats.get('efficiency_index_count', 0) > 0:
-            efficiency_avg = stats['efficiency_index_sum'] / stats['efficiency_index_count']
-
-        # 计算基本指标
-        avg_time = stats['request_time_total'] / stats['success_requests'] if stats['success_requests'] > 0 else 0
-        slow_ratio = stats['slow_requests_count'] / stats['success_requests'] if stats['success_requests'] > 0 else 0
-        is_slow_api = "Y" if (
-                    avg_time > DEFAULT_SLOW_THRESHOLD or slow_ratio > DEFAULT_SLOW_REQUESTS_THRESHOLD) else "N"
-        global_slow_ratio = (stats['slow_requests_count'] / total_slow_requests * 100) if total_slow_requests > 0 else 0
-
+        if success_requests == 0:
+            continue
+        
+        # 计算比例
+        success_rate = round(success_requests / total_requests * 100, 2) if total_requests > 0 else 0
+        slow_ratio = round(slow_requests / success_requests * 100, 2) if success_requests > 0 else 0
+        global_slow_ratio = round(slow_requests / global_stats['slow_requests'] * 100, 2) if global_stats['slow_requests'] > 0 else 0
+        global_request_ratio = round(success_requests / global_stats['success_requests'] * 100, 2) if global_stats['success_requests'] > 0 else 0
+        
+        # 计算平均时间
+        avg_request_time = safe_avg(stats['request_time_sum'], stats['request_time_count'])
+        is_slow_api = "Y" if (avg_request_time > analyzer.slow_threshold or slow_ratio > DEFAULT_SLOW_REQUESTS_THRESHOLD * 100) else "N"
+        
+        # 计算阶段平均时间
+        backend_connect_avg = safe_avg(stats['backend_connect_sum'], stats['backend_connect_count'])
+        backend_process_avg = safe_avg(stats['backend_process_sum'], stats['backend_process_count'])
+        backend_transfer_avg = safe_avg(stats['backend_transfer_sum'], stats['backend_transfer_count'])
+        nginx_transfer_avg = safe_avg(stats['nginx_transfer_sum'], stats['nginx_transfer_count'])
+        
+        # 计算阶段占比
+        total_phase_time = backend_connect_avg + backend_process_avg + backend_transfer_avg + nginx_transfer_avg
+        if total_phase_time > 0:
+            connect_ratio = round(backend_connect_avg / total_phase_time * 100, 2)
+            process_ratio = round(backend_process_avg / total_phase_time * 100, 2)
+            transfer_ratio = round(backend_transfer_avg / total_phase_time * 100, 2)
+            nginx_ratio = round(nginx_transfer_avg / total_phase_time * 100, 2)
+        else:
+            connect_ratio = process_ratio = transfer_ratio = nginx_ratio = 0
+        
+        # 计算大小指标
+        body_avg = safe_avg(stats['body_size_sum'], stats['body_size_count'])
+        bytes_avg = safe_avg(stats['bytes_size_sum'], stats['bytes_size_count'])
+        
+        # 计算性能指标
+        transfer_speed_avg = safe_avg(stats['transfer_speed_sum'], stats['transfer_speed_count'])
+        efficiency_avg = safe_avg(stats['efficiency_sum'], stats['efficiency_count'])
+        
+        # 计算百分位数(使用采样数据)
+        request_time_values = stats['request_time_values']
+        body_size_values = stats['body_size_values']
+        bytes_size_values = stats['bytes_size_values']
+        
+        # 数据质量指标
+        sample_count = len(request_time_values)
+        data_quality = round(sample_count / success_requests * 100, 1) if success_requests > 0 else 0
+        
         # 构建结果字典
         result = {
-            '请求URI': stats['request_uri'],
+            # 基础信息
+            '请求URI': api,
             '应用名称': stats['app_name'],
             '服务名称': stats['service_name'],
-            '请求总数': stats['total_requests'],
-            '成功请求数': stats['success_requests'],
-            '占总请求比例(%)': round(stats['success_requests'] / success_requests * 100, 2) if success_requests > 0 else 0,
-            '成功率(%)': round(stats['success_requests'] / stats['total_requests'] * 100, 2) if stats[
-                                                                                                 'total_requests'] > 0 else 0,
-            '慢请求数': stats['slow_requests_count'],
-            '慢请求比例(%)': round(slow_ratio * 100, 2),
-            '全局慢请求占比(%)': round(global_slow_ratio, 2),
+            
+            # 请求统计
+            '请求总数': total_requests,
+            '成功请求数': success_requests,
+            '占总请求比例(%)': global_request_ratio,
+            '成功率(%)': success_rate,
+            
+            # 慢请求统计
+            '慢请求数': slow_requests,
+            '慢请求比例(%)': slow_ratio,
+            '全局慢请求占比(%)': global_slow_ratio,
             '是否慢接口': is_slow_api,
-        }
-
-        # 请求时长统计
-        result.update({
-            '平均请求时长(秒)': round(avg_time, 3),
-            '最小请求时长(秒)': round(stats['request_time_min'] if stats['request_time_min'] != float('inf') else 0, 3),
-            '最大请求时长(秒)': round(stats['request_time_max'], 3),
-            '请求时长中位数(秒)': round(time_percentiles['request_time']['median'], 3),
-            'P90请求时长(秒)': round(time_percentiles['request_time']['p90'], 3),
-            'P95请求时长(秒)': round(time_percentiles['request_time']['p95'], 3),
-            'P99请求时长(秒)': round(time_percentiles['request_time']['p99'], 3),
-        })
-
-        # 阶段时长统计
-        backend_connect_avg = stats['backend_connect_phase_sum'] / stats['backend_connect_phase_count'] if stats.get('backend_connect_phase_count', 0) > 0 else 0
-        backend_process_avg = stats['backend_process_phase_sum'] / stats['backend_process_phase_count'] if stats.get('backend_process_phase_count', 0) > 0 else 0
-        backend_transfer_avg = stats['backend_transfer_phase_sum'] / stats['backend_transfer_phase_count'] if stats.get('backend_transfer_phase_count', 0) > 0 else 0
-        nginx_transfer_avg = stats['nginx_transfer_phase_sum'] / stats['nginx_transfer_phase_count'] if stats.get('nginx_transfer_phase_count', 0) > 0 else 0
-        
-        result.update({
-            '后端连接时长(秒)': round(backend_connect_avg, 3),
-            '后端处理时长(秒)': round(backend_process_avg, 3),
-            '后端传输时长(秒)': round(backend_transfer_avg, 3),
-            'Nginx传输时长(秒)': round(nginx_transfer_avg, 3),
-        })
-
-        # 阶段占比统计
-        if avg_time > 0:
-            result.update({
-                '后端连接占比(%)': round((backend_connect_avg / avg_time) * 100, 2),
-                '后端处理占比(%)': round((backend_process_avg / avg_time) * 100, 2),
-                '后端传输占比(%)': round((backend_transfer_avg / avg_time) * 100, 2),
-                'Nginx传输占比(%)': round((nginx_transfer_avg / avg_time) * 100, 2),
-            })
-        else:
-            result.update({
-                '后端连接占比(%)': 0,
-                '后端处理占比(%)': 0,
-                '后端传输占比(%)': 0,
-                'Nginx传输占比(%)': 0,
-            })
-
-        # 响应体大小统计 (KB)
-        body_avg = stats['body_kb_sum'] / stats['body_kb_count'] if stats.get('body_kb_count', 0) > 0 else 0
-        result.update({
+            
+            # 请求时间统计
+            '平均请求时长(秒)': avg_request_time,
+            '请求时长中位数(秒)': safe_percentile(request_time_values, 50),
+            'P90请求时长(秒)': safe_percentile(request_time_values, 90),
+            'P95请求时长(秒)': safe_percentile(request_time_values, 95),
+            'P99请求时长(秒)': safe_percentile(request_time_values, 99),
+            
+            # 阶段时间统计
+            '后端连接时长(秒)': backend_connect_avg,
+            '后端处理时长(秒)': backend_process_avg,
+            '后端传输时长(秒)': backend_transfer_avg,
+            'Nginx传输时长(秒)': nginx_transfer_avg,
+            
+            # 阶段占比统计
+            '后端连接占比(%)': connect_ratio,
+            '后端处理占比(%)': process_ratio,
+            '后端传输占比(%)': transfer_ratio,
+            'Nginx传输占比(%)': nginx_ratio,
+            
+            # 响应体大小统计
             '平均响应体大小(KB)': round(body_avg, 2),
-            '最小响应体大小(KB)': round(stats['body_kb_min'] if stats['body_kb_min'] != float('inf') else 0, 2),
-            '最大响应体大小(KB)': round(stats['body_kb_max'], 2),
-            '响应体大小中位数(KB)': round(size_percentiles['body_kb']['median'], 2),
-            'P90响应体大小(KB)': round(size_percentiles['body_kb']['p90'], 2),
-            'P95响应体大小(KB)': round(size_percentiles['body_kb']['p95'], 2),
-            'P99响应体大小(KB)': round(size_percentiles['body_kb']['p99'], 2),
-        })
-
-        # 传输大小统计 (KB)
-        bytes_avg = stats['bytes_kb_sum'] / stats['bytes_kb_count'] if stats.get('bytes_kb_count', 0) > 0 else 0
-        result.update({
+            '响应体大小中位数(KB)': round(safe_percentile(body_size_values, 50), 2),
+            'P90响应体大小(KB)': round(safe_percentile(body_size_values, 90), 2),
+            'P95响应体大小(KB)': round(safe_percentile(body_size_values, 95), 2),
+            'P99响应体大小(KB)': round(safe_percentile(body_size_values, 99), 2),
+            
+            # 传输大小统计
             '平均传输大小(KB)': round(bytes_avg, 2),
-            '最小传输大小(KB)': round(stats['bytes_kb_min'] if stats['bytes_kb_min'] != float('inf') else 0, 2),
-            '最大传输大小(KB)': round(stats['bytes_kb_max'], 2),
-            '传输大小中位数(KB)': round(size_percentiles['bytes_kb']['median'], 2),
-            'P90传输大小(KB)': round(size_percentiles['bytes_kb']['p90'], 2),
-            'P95传输大小(KB)': round(size_percentiles['bytes_kb']['p95'], 2),
-            'P99传输大小(KB)': round(size_percentiles['bytes_kb']['p99'], 2),
-        })
-
-        # 传输速度统计 (KB/s) - 使用近似值
-        result.update({
+            '传输大小中位数(KB)': round(safe_percentile(bytes_size_values, 50), 2),
+            'P90传输大小(KB)': round(safe_percentile(bytes_size_values, 90), 2),
+            'P95传输大小(KB)': round(safe_percentile(bytes_size_values, 95), 2),
+            'P99传输大小(KB)': round(safe_percentile(bytes_size_values, 99), 2),
+            
+            # 性能指标
             '平均传输速度(KB/s)': round(transfer_speed_avg, 2),
-            '最低传输速度(KB/s)': 0,  # 无法从统计量计算最小值
-            '最高传输速度(KB/s)': 0,  # 无法从统计量计算最大值
-            'P90传输速度(KB/s)': 0,  # 使用近似计算有误差，略过
-        })
-
-        # 效率指标统计
-        result.update({
-            '平均处理效率指数': round(efficiency_avg, 2),
-            '最低处理效率指数': 0,  # 无法从统计量计算最小值
-            '最高处理效率指数': 0,  # 无法从统计量计算最大值
-        })
-
+            '平均处理效率指数': round(efficiency_avg, 3),
+            
+            # 数据质量指标
+            '样本数量': sample_count,
+            '数据质量(%)': data_quality,
+            '计算精度': '高' if data_quality >= 80 else '中' if data_quality >= 50 else '低'
+        }
+        
         results.append(result)
-
-        # 清理内存（不再需要，因为没有存储原始数据）
-        pass
-
-        processed_apis += 1
-        if processed_apis % 100 == 0:
-            log_info(f"已处理 {processed_apis}/{len(api_stats)} 个API的统计数据", show_memory=True)
-
+    
+    log_info(f"已生成 {len(results)} 个API的统计报告", show_memory=True)
     return results
 
 
-def create_api_performance_excel(results_df, output_path, total_requests, success_requests,
-                                 total_slow_requests, response_times, body_sizes_kb, bytes_sizes_kb,
-                                 phase_times, transfer_speeds, efficiency_scores):
-    """创建API性能分析Excel报告"""
+def create_optimized_api_performance_excel(results_df, output_path, analyzer):
+    """创建优化的API性能分析Excel报告"""
     log_info(f"开始创建Excel报告: {output_path}", show_memory=True)
 
     wb = Workbook()
     if 'Sheet' in wb.sheetnames:
         del wb['Sheet']
 
-    # 定义分组表头
+    # 定义优化后的分组表头
     main_headers = {
         "请求URI": ["请求URI"],
         "应用信息": ["应用名称", "服务名称"],
         "请求统计": ["请求总数", "成功请求数", "占总请求比例(%)", "成功率(%)"],
         "慢请求统计": ["慢请求数", "慢请求比例(%)", "全局慢请求占比(%)", "是否慢接口"],
-        "请求时长(秒)": ["平均", "最小", "最大", "中位数", "P90", "P95", "P99"],
-        "阶段时长(秒)": ["后端连接", "后端处理", "后端传输", "Nginx传输"],
-        "阶段占比(%)": ["后端连接占比", "后端处理占比", "后端传输占比", "Nginx传输占比"],
-        "响应体大小(KB)": ["平均", "最小", "最大", "中位数", "P90", "P95", "P99"],
-        "传输大小(KB)": ["平均", "最小", "最大", "中位数", "P90", "P95", "P99"],
-        "传输速度(KB/s)": ["平均", "最低", "最高", "P90"],
-        "效率指标": ["平均处理效率指数", "最低处理效率指数", "最高处理效率指数"]
+        "请求时间分析(秒)": ["平均", "中位数", "P90", "P95", "P99"],
+        "阶段时间(秒)": ["后端连接", "后端处理", "后端传输", "Nginx传输"],
+        "阶段占比(%)": ["后端连接", "后端处理", "后端传输", "Nginx传输"],
+        "响应体大小(KB)": ["平均", "中位数", "P90", "P95", "P99"],
+        "传输大小(KB)": ["平均", "中位数", "P90", "P95", "P99"],
+        "性能指标": ["平均传输速度(KB/s)", "平均处理效率指数"],
+        "数据质量": ["样本数量", "数据质量(%)", "计算精度"]
     }
 
-    # 列名映射
+    # 列名映射 - 简化版本
     column_mapping = {
         '请求URI': '请求URI',
         '应用名称': '应用名称',
@@ -589,8 +639,6 @@ def create_api_performance_excel(results_df, output_path, total_requests, succes
         '全局慢请求占比(%)': '全局慢请求占比(%)',
         '是否慢接口': '是否慢接口',
         '平均请求时长(秒)': '平均',
-        '最小请求时长(秒)': '最小',
-        '最大请求时长(秒)': '最大',
         '请求时长中位数(秒)': '中位数',
         'P90请求时长(秒)': 'P90',
         'P95请求时长(秒)': 'P95',
@@ -599,28 +647,25 @@ def create_api_performance_excel(results_df, output_path, total_requests, succes
         '后端处理时长(秒)': '后端处理',
         '后端传输时长(秒)': '后端传输',
         'Nginx传输时长(秒)': 'Nginx传输',
-        '后端连接占比(%)': '后端连接占比',
-        '后端处理占比(%)': '后端处理占比',
-        '后端传输占比(%)': '后端传输占比',
-        'Nginx传输占比(%)': 'Nginx传输占比',
+        '后端连接占比(%)': '后端连接',
+        '后端处理占比(%)': '后端处理',
+        '后端传输占比(%)': '后端传输',
+        'Nginx传输占比(%)': 'Nginx传输',
         '平均响应体大小(KB)': '平均',
-        '最小响应体大小(KB)': '最小',
-        '最大响应体大小(KB)': '最大',
         '响应体大小中位数(KB)': '中位数',
         'P90响应体大小(KB)': 'P90',
         'P95响应体大小(KB)': 'P95',
         'P99响应体大小(KB)': 'P99',
         '平均传输大小(KB)': '平均',
-        '最小传输大小(KB)': '最小',
-        '最大传输大小(KB)': '最大',
         '传输大小中位数(KB)': '中位数',
         'P90传输大小(KB)': 'P90',
         'P95传输大小(KB)': 'P95',
         'P99传输大小(KB)': 'P99',
-        '平均传输速度(KB/s)': '平均',
-        '最低传输速度(KB/s)': '最低',
-        '最高传输速度(KB/s)': '最高',
-        'P90传输速度(KB/s)': 'P90'
+        '平均传输速度(KB/s)': '平均传输速度(KB/s)',
+        '平均处理效率指数': '平均处理效率指数',
+        '样本数量': '样本数量',
+        '数据质量(%)': '数据质量(%)',
+        '计算精度': '计算精度'
     }
 
     # 重命名列
@@ -631,191 +676,206 @@ def create_api_performance_excel(results_df, output_path, total_requests, succes
     ws1 = add_dataframe_to_excel_with_grouped_headers(wb, renamed_df, 'API性能统计', header_groups=main_headers)
 
     # 高亮慢接口行
-    for row_idx in range(2, len(renamed_df) + 2):
-        if ws1.cell(row=row_idx, column=renamed_df.columns.get_loc('是否慢接口') + 1).value == 'Y':
-            for col_idx in range(1, len(renamed_df.columns) + 1):
-                ws1.cell(row=row_idx, column=col_idx).fill = HIGHLIGHT_FILL
+    try:
+        slow_api_col = renamed_df.columns.get_loc('是否慢接口') + 1
+        for row_idx in range(3, len(renamed_df) + 3):  # 调整行索引以匹配分组表头
+            if ws1.cell(row=row_idx, column=slow_api_col).value == 'Y':
+                for col_idx in range(1, len(renamed_df.columns) + 1):
+                    ws1.cell(row=row_idx, column=col_idx).fill = HIGHLIGHT_FILL
+    except Exception as e:
+        log_info(f"高亮慢接口失败: {e}")
 
     # 创建整体分析工作表
-    ws2 = wb.create_sheet(title='整体API请求分析')
+    create_optimized_overview_sheet(wb, analyzer, results_df)
 
-    # 修正变量名，使用正确的KB单位数据
-    body_sizes = body_sizes_kb  # 已经是KB单位
-    bytes_sizes = bytes_sizes_kb  # 已经是KB单位
+    # 添加性能分析工作表
+    create_performance_analysis_sheet(wb, results_df)
 
-    # 计算整体统计数据
-    total_body_size_gb = round(sum(body_sizes) / (1024 * 1024), 3) if body_sizes and len(body_sizes) > 0 else 0
-    total_bytes_size_gb = round(sum(bytes_sizes) / (1024 * 1024), 3) if bytes_sizes and len(bytes_sizes) > 0 else 0
+    # 格式化工作表
+    format_excel_sheet(ws1)
+    
+    log_info(f"Excel报告格式化完成，准备保存", show_memory=True)
+    wb.save(output_path)
+    log_info(f"Excel报告已保存: {output_path}", show_memory=True)
 
-    avg_response_time = round(sum(response_times) / len(response_times), 3) if response_times and len(
-        response_times) > 0 else 0
-    median_response_time = round(np.median(response_times), 3) if response_times and len(response_times) > 0 else 0
-    p90_response_time = round(np.percentile(response_times, 90), 3) if response_times and len(response_times) > 0 else 0
-    p95_response_time = round(np.percentile(response_times, 95), 3) if response_times and len(response_times) > 0 else 0
-    p99_response_time = round(np.percentile(response_times, 99), 3) if response_times and len(response_times) > 0 else 0
 
-    # 响应体大小统计（已经是KB单位）
-    avg_body_size = round(sum(body_sizes) / len(body_sizes), 2) if body_sizes and len(body_sizes) > 0 else 0
-    median_body_size = round(np.median(body_sizes), 2) if body_sizes and len(body_sizes) > 0 else 0
-    p90_body_size = round(np.percentile(body_sizes, 90), 2) if body_sizes and len(body_sizes) > 0 else 0
-    p95_body_size = round(np.percentile(body_sizes, 95), 2) if body_sizes and len(body_sizes) > 0 else 0
-    p99_body_size = round(np.percentile(body_sizes, 99), 2) if body_sizes and len(body_sizes) > 0 else 0
-
-    # 传输大小统计（已经是KB单位）
-    avg_bytes_size = round(sum(bytes_sizes) / len(bytes_sizes), 2) if bytes_sizes and len(bytes_sizes) > 0 else 0
-    median_bytes_size = round(np.median(bytes_sizes), 2) if bytes_sizes and len(bytes_sizes) > 0 else 0
-    p90_bytes_size = round(np.percentile(bytes_sizes, 90), 2) if bytes_sizes and len(bytes_sizes) > 0 else 0
-    p95_bytes_size = round(np.percentile(bytes_sizes, 95), 2) if bytes_sizes and len(bytes_sizes) > 0 else 0
-    p99_bytes_size = round(np.percentile(bytes_sizes, 99), 2) if bytes_sizes and len(bytes_sizes) > 0 else 0
-
-    # 传输速度统计
-    avg_transfer_speed = round(np.mean(transfer_speeds), 2) if len(transfer_speeds) > 0 else 0
-    median_transfer_speed = round(np.median(transfer_speeds), 2) if len(transfer_speeds) > 0 else 0
-    p90_transfer_speed = round(np.percentile(transfer_speeds, 90), 2) if len(transfer_speeds) > 0 else 0
-    p95_transfer_speed = round(np.percentile(transfer_speeds, 95), 2) if len(transfer_speeds) > 0 else 0
-
-    # 处理效率指数统计
-    avg_efficiency = round(np.mean(efficiency_scores), 2) if len(efficiency_scores) > 0 else 0
-    median_efficiency = round(np.median(efficiency_scores), 2) if len(efficiency_scores) > 0 else 0
-    p90_efficiency = round(np.percentile(efficiency_scores, 90), 2) if len(efficiency_scores) > 0 else 0
-
-    # 阶段时间占比计算（使用新的阶段数据）
-    total_phase_times = calculate_time_percentages(phase_times) if avg_response_time > 0 else {
-        'backend_connect_phase': 0,
-        'backend_process_phase': 0,
-        'backend_transfer_phase': 0,
-        'nginx_transfer_phase': 0
-    }
-
+def create_optimized_overview_sheet(wb, analyzer, results_df):
+    """创建优化的概览工作表"""
+    ws = wb.create_sheet(title='整体分析概览')
+    global_stats = analyzer.global_stats
+    
+    # 获取全局样本数据
+    global_samples = global_stats['global_samples']
+    response_times = global_samples['response_times']
+    body_sizes = global_samples['body_sizes']
+    bytes_sizes = global_samples['bytes_sizes']
+    transfer_speeds = global_samples['transfer_speeds']
+    efficiency_scores = global_samples['efficiency_scores']
+    
+    # 安全的统计计算
+    def safe_stat(data, func, default=0):
+        try:
+            return round(func(data), 3) if data and len(data) > 0 else default
+        except:
+            return default
+    
     # 整体统计数据
-    overall_stats = [
+    overview_stats = [
         ['=== 基础统计 ===', ''],
-        ['总请求数', total_requests],
-        ['成功请求数', success_requests],
-        ['成功率(%)', round(success_requests / total_requests * 100, 2) if total_requests > 0 else 0],
-        ['慢请求数', total_slow_requests],
-        ['慢请求占比(%)', round(total_slow_requests / success_requests * 100, 2) if success_requests > 0 else 0],
+        ['总请求数', global_stats['total_requests']],
+        ['成功请求数', global_stats['success_requests']],
+        ['成功率(%)', round(global_stats['success_requests'] / global_stats['total_requests'] * 100, 2) if global_stats['total_requests'] > 0 else 0],
+        ['慢请求数', global_stats['slow_requests']],
+        ['慢请求占比(%)', round(global_stats['slow_requests'] / global_stats['success_requests'] * 100, 2) if global_stats['success_requests'] > 0 else 0],
         ['API数量', len(results_df)],
         ['', ''],
-
+        
         ['=== 响应时间分析 ===', ''],
-        ['平均响应时间(秒)', avg_response_time],
-        ['最小响应时间(秒)', round(min(response_times), 3) if response_times and len(response_times) > 0 else 0],
-        ['最大响应时间(秒)', round(max(response_times), 3) if response_times and len(response_times) > 0 else 0],
-        ['中位数响应时间(秒)', median_response_time],
-        ['P90响应时间(秒)', p90_response_time],
-        ['P95响应时间(秒)', p95_response_time],
-        ['P99响应时间(秒)', p99_response_time],
+        ['平均响应时间(秒)', safe_stat(response_times, np.mean)],
+        ['中位数响应时间(秒)', safe_stat(response_times, np.median)],
+        ['P90响应时间(秒)', safe_stat(response_times, lambda x: np.percentile(x, 90))],
+        ['P95响应时间(秒)', safe_stat(response_times, lambda x: np.percentile(x, 95))],
+        ['P99响应时间(秒)', safe_stat(response_times, lambda x: np.percentile(x, 99))],
+        ['样本数量', len(response_times)],
         ['', ''],
-
-        ['=== 阶段时间占比 ===', ''],
-        ['后端连接阶段占比(%)', total_phase_times.get('backend_connect_phase', 0)],
-        ['后端处理阶段占比(%)', total_phase_times.get('backend_process_phase', 0)],
-        ['后端传输阶段占比(%)', total_phase_times.get('backend_transfer_phase', 0)],
-        ['Nginx传输阶段占比(%)', total_phase_times.get('nginx_transfer_phase', 0)],
-        ['', ''],
-
+        
         ['=== 数据传输分析 ===', ''],
-        ['响应体总大小(GB)', total_body_size_gb],
-        ['平均响应体大小(KB)', avg_body_size],
-        ['中位数响应体大小(KB)', median_body_size],
-        ['P90响应体大小(KB)', p90_body_size],
-        ['P95响应体大小(KB)', p95_body_size],
-        ['P99响应体大小(KB)', p99_body_size],
+        ['平均响应体大小(KB)', safe_stat(body_sizes, np.mean, 0)],
+        ['P90响应体大小(KB)', safe_stat(body_sizes, lambda x: np.percentile(x, 90), 0)],
+        ['P99响应体大小(KB)', safe_stat(body_sizes, lambda x: np.percentile(x, 99), 0)],
+        ['平均传输大小(KB)', safe_stat(bytes_sizes, np.mean, 0)],
+        ['P90传输大小(KB)', safe_stat(bytes_sizes, lambda x: np.percentile(x, 90), 0)],
+        ['P99传输大小(KB)', safe_stat(bytes_sizes, lambda x: np.percentile(x, 99), 0)],
         ['', ''],
-
-        ['总传输数据量(GB)', total_bytes_size_gb],
-        ['平均传输大小(KB)', avg_bytes_size],
-        ['中位数传输大小(KB)', median_bytes_size],
-        ['P90传输大小(KB)', p90_bytes_size],
-        ['P95传输大小(KB)', p95_bytes_size],
-        ['P99传输大小(KB)', p99_bytes_size],
+        
+        ['=== 性能指标分析 ===', ''],
+        ['平均传输速度(KB/s)', safe_stat(transfer_speeds, np.mean, 0)],
+        ['P90传输速度(KB/s)', safe_stat(transfer_speeds, lambda x: np.percentile(x, 90), 0)],
+        ['平均处理效率指数', safe_stat(efficiency_scores, np.mean, 0)],
+        ['P90处理效率指数', safe_stat(efficiency_scores, lambda x: np.percentile(x, 90), 0)],
         ['', ''],
-
-        ['=== 传输性能分析 ===', ''],
-        ['平均传输速度(KB/s)', avg_transfer_speed],
-        ['中位数传输速度(KB/s)', median_transfer_speed],
-        ['P90传输速度(KB/s)', p90_transfer_speed],
-        ['P95传输速度(KB/s)', p95_transfer_speed],
-        ['', ''],
-
-        ['=== 处理效率分析 ===', ''],
-        ['平均处理效率指数', avg_efficiency],
-        ['中位数处理效率指数', median_efficiency],
-        ['P90处理效率指数', p90_efficiency],
-        ['', ''],
-
+        
         ['=== 性能阈值设置 ===', ''],
-        ['慢请求阈值(秒)', DEFAULT_SLOW_THRESHOLD],
+        ['慢请求阈值(秒)', analyzer.slow_threshold],
         ['慢请求占比阈值(%)', DEFAULT_SLOW_REQUESTS_THRESHOLD * 100],
     ]
-
-    # 写入整体统计数据
-    for row_idx, (label, value) in enumerate(overall_stats, start=1):
-        cell_label = ws2.cell(row=row_idx, column=1, value=label)
-        cell_value = ws2.cell(row=row_idx, column=2, value=value)
-
+    
+    # 写入数据
+    for row_idx, (label, value) in enumerate(overview_stats, start=1):
+        cell_label = ws.cell(row=row_idx, column=1, value=label)
+        cell_value = ws.cell(row=row_idx, column=2, value=value)
+        
         # 设置标题行格式
         if label.startswith('===') and label.endswith('==='):
             cell_label.font = Font(bold=True, size=12)
             cell_value.font = Font(bold=True, size=12)
-
+    
     # 设置列宽
-    ws2.column_dimensions['A'].width = 30
-    ws2.column_dimensions['B'].width = 20
+    ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 20
+    
+    # 添加TOP API分析
+    next_row = len(overview_stats) + 3
+    add_top_apis_analysis(ws, results_df, next_row)
+    
+    format_excel_sheet(ws)
 
-    # 添加TOP API分析区域
-    next_section_start = len(overall_stats) + 3
 
-    # 请求量最多的10个API
-    add_top_apis_section(ws2, results_df.sort_values(by='成功请求数', ascending=False),
-                         next_section_start, "请求量最多的10个API",
-                         ['API', '请求总数', '成功请求数', '占比(%)', '平均请求时间(秒)'],
-                         ['请求URI', '请求总数', '成功请求数', '占总请求比例(%)', '平均请求时长(秒)'])
+def add_top_apis_analysis(ws, results_df, start_row):
+    """添加TOP API分析"""
+    sections = [
+        ('请求量最多的10个API', '成功请求数', False,
+         ['API', '成功请求数', '占比(%)', '平均时间(秒)'],
+         ['请求URI', '成功请求数', '占总请求比例(%)', '平均请求时长(秒)']),
+        
+        ('响应时间最长的10个API', '平均请求时长(秒)', False,
+         ['API', '平均时间(秒)', 'P99时间(秒)', '成功请求数'],
+         ['请求URI', '平均请求时长(秒)', 'P99请求时长(秒)', '成功请求数']),
+        
+        ('响应体最大的10个API', '平均响应体大小(KB)', False,
+         ['API', '平均响应体(KB)', 'P99响应体(KB)', '成功请求数'],
+         ['请求URI', '平均响应体大小(KB)', 'P99响应体大小(KB)', '成功请求数'])
+    ]
+    
+    current_row = start_row
+    for title, sort_col, ascending, display_headers, data_cols in sections:
+        # 添加标题
+        ws.cell(row=current_row, column=1, value=title).font = Font(bold=True, size=12)
+        current_row += 2
+        
+        # 添加表头
+        for col_idx, header in enumerate(display_headers, start=1):
+            ws.cell(row=current_row, column=col_idx, value=header).font = Font(bold=True)
+        current_row += 1
+        
+        # 添加数据
+        top_data = results_df.sort_values(by=sort_col, ascending=ascending).head(10)
+        for _, row_data in top_data.iterrows():
+            for col_idx, col_name in enumerate(data_cols, start=1):
+                value = row_data.get(col_name, '')
+                cell = ws.cell(row=current_row, column=col_idx, value=value)
+                # 高亮慢请求
+                if col_name == '平均请求时长(秒)' and value > DEFAULT_SLOW_THRESHOLD:
+                    cell.fill = HIGHLIGHT_FILL
+            current_row += 1
+        
+        current_row += 2  # 空行分隔
 
-    # 响应时间最长的10个API
-    add_top_apis_section(ws2, results_df.sort_values(by='平均请求时长(秒)', ascending=False),
-                         next_section_start + 15, "响应时间最长的10个API",
-                         ['API', '平均响应时间(秒)', 'P95响应时间(秒)', '请求总数', '成功请求数'],
-                         ['请求URI', '平均请求时长(秒)', 'P95请求时长(秒)', '请求总数', '成功请求数'])
 
-    # 响应体大小最大的10个API
-    add_top_apis_section(ws2, results_df.sort_values(by='平均响应体大小(KB)', ascending=False),
-                         next_section_start + 30, "响应体大小最大的10个API",
-                         ['API', '平均响应体大小(KB)', 'P95响应体大小(KB)', '请求总数', '成功请求数'],
-                         ['请求URI', '平均响应体大小(KB)', 'P95响应体大小(KB)', '请求总数', '成功请求数'])
-
-    # 传输大小最大的10个API
-    add_top_apis_section(ws2, results_df.sort_values(by='平均传输大小(KB)', ascending=False),
-                         next_section_start + 45, "传输大小最大的10个API",
-                         ['API', '平均传输大小(KB)', 'P95传输大小(KB)', '成功请求数'],
-                         ['请求URI', '平均传输大小(KB)', 'P95传输大小(KB)', '成功请求数'])
-
-    # 传输速度最低的10个API（新增）
-    add_top_apis_section(ws2, results_df.sort_values(by='平均传输速度(KB/s)', ascending=True),
-                         next_section_start + 60, "传输速度最低的10个API",
-                         ['API', '平均传输速度(KB/s)', '平均响应体大小(KB)', '成功请求数'],
-                         ['请求URI', '平均传输速度(KB/s)', '平均响应体大小(KB)', '成功请求数'])
-
-    # 处理效率最低的10个API（新增）
-    add_top_apis_section(ws2, results_df.sort_values(by='平均处理效率指数', ascending=True),
-                         next_section_start + 75, "处理效率最低的10个API",
-                         ['API', '平均处理效率指数', '后端处理时长(秒)', '成功请求数'],
-                         ['请求URI', '平均处理效率指数', '后端处理时长(秒)', '成功请求数'])
-
-    # 添加阶段时间分析工作表
-    add_phase_time_analysis(wb, total_phase_times, response_times)
-
-    # 添加性能瓶颈分析工作表（新增）
-    add_performance_bottleneck_analysis(wb, results_df)
-
-    # 格式化工作表
-    format_excel_sheet(ws1)
-    format_excel_sheet(ws2)
-
-    log_info(f"Excel报告格式化完成，准备保存", show_memory=True)
-    wb.save(output_path)
-    log_info(f"Excel报告已保存: {output_path}", show_memory=True)
+def create_performance_analysis_sheet(wb, results_df):
+    """创建性能分析工作表"""
+    ws = wb.create_sheet(title='性能瓶颈分析')
+    
+    # 分析各类性能问题
+    analysis_sections = [
+        ('高耗时接口 (P99>5秒)', 'P99请求时长(秒)', 5,
+         ['API', 'P99时间(秒)', '平均时间(秒)', '成功请求数'],
+         ['请求URI', 'P99请求时长(秒)', '平均请求时长(秒)', '成功请求数']),
+        
+        ('后端连接耗时过长接口 (连接占比>30%)', '后端连接占比(%)', 30,
+         ['API', '连接占比(%)', '连接时间(秒)', '成功请求数'],
+         ['请求URI', '后端连接占比(%)', '后端连接时长(秒)', '成功请求数']),
+        
+        ('后端处理缓慢接口 (处理占比>60%)', '后端处理占比(%)', 60,
+         ['API', '处理占比(%)', '处理时间(秒)', '成功请求数'],
+         ['请求URI', '后端处理占比(%)', '后端处理时长(秒)', '成功请求数']),
+        
+        ('大数据传输接口 (P95>1MB)', 'P95响应体大小(KB)', 1024,
+         ['API', 'P95响应体(KB)', '平均响应体(KB)', '成功请求数'],
+         ['请求URI', 'P95响应体大小(KB)', '平均响应体大小(KB)', '成功请求数'])
+    ]
+    
+    current_row = 1
+    for title, filter_col, threshold, display_headers, data_cols in analysis_sections:
+        # 筛选数据
+        filtered_data = results_df[results_df[filter_col] > threshold].sort_values(by=filter_col, ascending=False)
+        
+        if filtered_data.empty:
+            continue
+        
+        # 添加标题
+        ws.cell(row=current_row, column=1, value=title).font = Font(bold=True, size=12)
+        current_row += 2
+        
+        # 添加表头
+        for col_idx, header in enumerate(display_headers, start=1):
+            ws.cell(row=current_row, column=col_idx, value=header).font = Font(bold=True)
+        current_row += 1
+        
+        # 添加数据
+        for _, row_data in filtered_data.head(10).iterrows():
+            for col_idx, col_name in enumerate(data_cols, start=1):
+                value = row_data.get(col_name, '')
+                ws.cell(row=current_row, column=col_idx, value=value)
+            current_row += 1
+        
+        current_row += 2  # 空行分隔
+    
+    # 设置列宽
+    for col in range(1, 6):
+        ws.column_dimensions[chr(64 + col)].width = 25 if col == 1 else 15
+    
+    format_excel_sheet(ws)
 
 
 def add_performance_bottleneck_analysis(workbook, results_df):

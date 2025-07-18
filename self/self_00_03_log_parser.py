@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from self_00_02_utils import log_info, extract_app_name, extract_service_from_path
 from self_00_01_constants import (
-    DEFAULT_BATCH_SIZE, DEFAULT_LOG_DIR, DEFAULT_底座_LOG_DIR,
+    DEFAULT_BATCH_SIZE, DEFAULT_LOG_DIR,
     LOG_TYPE_SELF_DEVELOPED, LOG_TYPE_BASE, LOG_TYPE_AUTO,
     DEFAULT_START_DATE, DEFAULT_END_DATE, ESTIMATED_HEADER_SIZE
 )
