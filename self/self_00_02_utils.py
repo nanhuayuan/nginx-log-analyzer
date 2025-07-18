@@ -28,6 +28,13 @@ def monitor_memory():
     return memory_usage_mb
 
 
+def format_memory_usage():
+    """格式化内存使用情况为字符串"""
+    process = psutil.Process(os.getpid())
+    memory_usage_mb = process.memory_info().rss / 1024 / 1024
+    return f"{memory_usage_mb:.2f} MB"
+
+
 def extract_app_name(filename):
     """从日志文件名中提取应用名称"""
     base_name = os.path.basename(filename)

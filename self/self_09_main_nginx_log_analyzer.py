@@ -14,7 +14,8 @@ from self_11_header_performance_analyzer import analyze_header_performance_corre
 from self_00_03_log_parser import collect_log_files, process_log_files
 #from self_02_service_analyzer import analyze_service_performance
 from self_02_service_analyzer_advanced import analyze_service_performance_advanced
-from self_03_slow_requests_analyzer import analyze_slow_requests
+#from self_03_slow_requests_analyzer import analyze_slow_requests
+from self_03_slow_requests_analyzer_advanced import analyze_slow_requests_advanced
 from self_04_status_analyzer import analyze_status_codes
 from self_05_time_dimension_analyzer import analyze_time_dimension
 from self_00_02_utils import log_info
@@ -82,9 +83,10 @@ def main():
                 "csv_path": temp_csv, "output_path": service_output,
                 "success_codes": DEFAULT_SUCCESS_CODES
             }},
-            {"name": "慢请求分析", "func": analyze_slow_requests, "args": {
+            #{"name": "慢请求分析", "func": analyze_slow_requests, "args": {
+            {"name": "慢请求分析", "func": analyze_slow_requests_advanced, "args": {
                 "csv_path": temp_csv, "output_path": slow_output,
-                "threshold": DEFAULT_SLOW_THRESHOLD
+                "slow_threshold": DEFAULT_SLOW_THRESHOLD
             }},
             {"name": "状态码统计", "func": analyze_status_codes, "args": {
                 "csv_path": temp_csv, "output_path": status_output
