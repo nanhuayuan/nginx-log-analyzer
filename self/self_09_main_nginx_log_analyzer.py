@@ -6,7 +6,8 @@ from datetime import datetime
 from self_01_api_analyzer_optimized import analyze_api_performance
 from self_00_01_constants import DEFAULT_LOG_DIR, DEFAULT_SUCCESS_CODES, DEFAULT_SLOW_THRESHOLD, DEFAULT_COLUMN_API, \
     DEFAULT_START_DATE, DEFAULT_END_DATE
-from self_06_performance_stability_analyzer import analyze_service_stability
+#from self_06_performance_stability_analyzer import analyze_service_stability
+from self_06_performance_stability_analyzer_advanced import analyze_service_stability
 from self_07_generate_summary_report_analyzer import generate_summary_report
 from self_08_ip_analyzer import analyze_ip_sources
 from self_10_request_header_analyzer import analyze_request_headers
@@ -16,8 +17,10 @@ from self_00_03_log_parser import collect_log_files, process_log_files
 from self_02_service_analyzer_advanced import analyze_service_performance_advanced
 #from self_03_slow_requests_analyzer import analyze_slow_requests
 from self_03_slow_requests_analyzer_advanced import analyze_slow_requests_advanced
-from self_04_status_analyzer import analyze_status_codes
-from self_05_time_dimension_analyzer import analyze_time_dimension
+from self_04_status_analyzer_advanced import analyze_status_codes
+#from self_04_status_analyzer import analyze_status_codes
+#from self_05_time_dimension_analyzer import analyze_time_dimension
+from self_05_time_dimension_analyzer_advanced import analyze_time_dimension
 from self_00_02_utils import log_info
 
 
@@ -88,8 +91,10 @@ def main():
                 "csv_path": temp_csv, "output_path": slow_output,
                 "slow_threshold": DEFAULT_SLOW_THRESHOLD
             }},
+            #{"name": "状态码统计", "func": analyze_status_codes, "args": {
             {"name": "状态码统计", "func": analyze_status_codes, "args": {
-                "csv_path": temp_csv, "output_path": status_output
+                "csv_path": temp_csv, "output_path": status_output,
+                "slow_request_threshold": DEFAULT_SLOW_THRESHOLD
             }},
             {"name": "时间维度分析-全部接口", "func": analyze_time_dimension, "args": {
                 "csv_path": temp_csv, "output_path": time_output
