@@ -12,6 +12,7 @@ from self_00_04_excel_processor import (
     create_pie_chart,
     create_line_chart
 )
+from self_00_05_sampling_algorithms import ReservoirSampler
 from self_10_request_header_analyzer import (
     extract_browser_info, 
     extract_os_info, 
@@ -24,8 +25,8 @@ from self_10_request_header_analyzer import (
 
 
 def analyze_header_performance_correlation(csv_path, output_path, slow_threshold=DEFAULT_SLOW_THRESHOLD):
-    """分析请求头与性能的关联性"""
-    log_info("开始分析请求头与性能的关联性...", show_memory=True)
+    """分析请求头与性能的关联性 - 内存优化版"""
+    log_info("🚀 开始请求头性能关联分析（内存优化版）...", show_memory=True)
     
     chunk_size = max(DEFAULT_CHUNK_SIZE // 2, 10000)
     
@@ -34,7 +35,7 @@ def analyze_header_performance_correlation(csv_path, output_path, slow_threshold
         'total_requests': 0,
         'slow_requests': 0,
         'total_response_time': 0.0,
-        'response_times': [],
+        'response_times_sampler': ReservoirSampler(1000),  # 替代无限制数组
         'error_requests': 0,
         'data_transferred': 0.0
     })
@@ -43,7 +44,7 @@ def analyze_header_performance_correlation(csv_path, output_path, slow_threshold
         'total_requests': 0,
         'slow_requests': 0,
         'total_response_time': 0.0,
-        'response_times': [],
+        'response_times_sampler': ReservoirSampler(1000),  # 替代无限制数组
         'error_requests': 0,
         'data_transferred': 0.0
     })
@@ -52,7 +53,7 @@ def analyze_header_performance_correlation(csv_path, output_path, slow_threshold
         'total_requests': 0,
         'slow_requests': 0,
         'total_response_time': 0.0,
-        'response_times': [],
+        'response_times_sampler': ReservoirSampler(1000),  # 替代无限制数组
         'error_requests': 0,
         'data_transferred': 0.0
     })
@@ -61,7 +62,7 @@ def analyze_header_performance_correlation(csv_path, output_path, slow_threshold
         'total_requests': 0,
         'slow_requests': 0,
         'total_response_time': 0.0,
-        'response_times': [],
+        'response_times_sampler': ReservoirSampler(1000),  # 替代无限制数组
         'error_requests': 0,
         'data_transferred': 0.0
     })
@@ -70,7 +71,7 @@ def analyze_header_performance_correlation(csv_path, output_path, slow_threshold
         'total_requests': 0,
         'slow_requests': 0,
         'total_response_time': 0.0,
-        'response_times': [],
+        'response_times_sampler': ReservoirSampler(1000),  # 替代无限制数组
         'error_requests': 0,
         'data_transferred': 0.0
     })
@@ -79,7 +80,7 @@ def analyze_header_performance_correlation(csv_path, output_path, slow_threshold
         'total_requests': 0,
         'slow_requests': 0,
         'total_response_time': 0.0,
-        'response_times': [],
+        'response_times_sampler': ReservoirSampler(1000),  # 替代无限制数组
         'error_requests': 0,
         'data_transferred': 0.0
     })
@@ -180,7 +181,7 @@ def analyze_header_performance_correlation(csv_path, output_path, slow_threshold
             gc.collect()
             log_info(f"已处理 {total_processed:,} 条记录，发现 {total_slow_requests:,} 条慢请求")
     
-    log_info(f"性能关联分析完成：总记录 {total_processed:,}，慢请求 {total_slow_requests:,}")
+    log_info(f"✅ 性能关联分析完成：总记录 {total_processed:,}，慢请求 {total_slow_requests:,}")
     
     # 生成分析结果
     analysis_results = {
@@ -198,7 +199,7 @@ def analyze_header_performance_correlation(csv_path, output_path, slow_threshold
     # 创建Excel报告
     create_header_performance_excel(analysis_results, output_path, slow_threshold)
     
-    log_info(f"请求头性能关联分析完成，报告已生成：{output_path}", show_memory=True)
+    log_info(f"🎉 请求头性能关联分析完成，报告已生成：{output_path}", show_memory=True)
     
     # 返回关键洞察
     insights = generate_performance_insights(analysis_results, slow_threshold)
@@ -218,9 +219,8 @@ def update_performance_stats(stats, response_time, is_slow, is_error, data_size)
     
     stats['data_transferred'] += data_size
     
-    # 采样保存响应时间（避免内存问题）
-    if len(stats['response_times']) < 1000:
-        stats['response_times'].append(response_time)
+    # 使用蓄水池采样保存响应时间（避免内存问题）
+    stats['response_times_sampler'].add({'response_time': response_time})
 
 
 def calculate_performance_metrics(performance_data):
@@ -236,7 +236,7 @@ def calculate_performance_metrics(performance_data):
         error_requests = stats['error_requests']
         total_response_time = stats['total_response_time']
         data_transferred = stats['data_transferred']
-        response_times = stats['response_times']
+        response_times_sample = [item['response_time'] for item in stats['response_times_sampler'].get_samples()]
         
         # 计算关键指标
         slow_rate = (slow_requests / total_requests * 100) if total_requests > 0 else 0
@@ -244,12 +244,12 @@ def calculate_performance_metrics(performance_data):
         avg_response_time = total_response_time / total_requests if total_requests > 0 else 0
         avg_data_size = data_transferred / total_requests if total_requests > 0 else 0
         
-        # 计算百分位数
-        if response_times:
+        # 计算百分位数 - 基于采样数据
+        if response_times_sample:
             import numpy as np
-            p50 = np.percentile(response_times, 50)
-            p95 = np.percentile(response_times, 95)
-            p99 = np.percentile(response_times, 99)
+            p50 = np.percentile(response_times_sample, 50)
+            p95 = np.percentile(response_times_sample, 95)
+            p99 = np.percentile(response_times_sample, 99)
         else:
             p50 = p95 = p99 = 0
         

@@ -587,7 +587,7 @@ class AdvancedSummaryReportGenerator:
     # 辅助方法
     def _calculate_error_rate(self, status_stats) -> float:
         """计算错误率"""
-        if not status_stats or (hasattr(status_stats, 'empty') and status_stats.empty):
+        if status_stats is None or (hasattr(status_stats, 'empty') and status_stats.empty):
             return 0.0
         
         error_rate = 0.0

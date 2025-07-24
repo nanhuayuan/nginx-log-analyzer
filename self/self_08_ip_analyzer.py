@@ -75,13 +75,23 @@ def analyze_ip_sources(csv_path, output_path, top_n=100):
             
             # 成功和错误请求统计
             if 'response_status_code' in group.columns:
-                status_counts = group['response_status_code'].value_counts()
-                for status, count in status_counts.items():
-                    stats['status_codes'][status] += count
-                    if status.startswith('2') or status.startswith('3'):
-                        stats['success_requests'] += count
-                    elif status.startswith('4') or status.startswith('5'):
-                        stats['error_requests'] += count
+                # 过滤掉空值和无效状态码
+                valid_status_codes = group['response_status_code'].dropna()
+                if not valid_status_codes.empty:
+                    status_counts = valid_status_codes.value_counts()
+                    for status, count in status_counts.items():
+                        # 确保状态码是字符串格式并清理
+                        status_str = str(status).strip()
+                        
+                        # 跳过无效状态码
+                        if status_str in ['None', 'nan', '', '-'] or len(status_str) < 3:
+                            continue
+                            
+                        stats['status_codes'][status_str] += count
+                        if status_str.startswith('2') or status_str.startswith('3'):
+                            stats['success_requests'] += count
+                        elif status_str.startswith('4') or status_str.startswith('5'):
+                            stats['error_requests'] += count
             
             # 慢请求统计
             if 'total_request_duration' in group.columns:
