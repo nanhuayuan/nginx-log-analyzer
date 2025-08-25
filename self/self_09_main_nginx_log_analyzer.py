@@ -15,6 +15,7 @@ from self_08_ip_analyzer_advanced import analyze_ip_sources
 #from self_10_request_header_analyzer import analyze_request_headers
 from self_10_request_header_analyzer_advanced import analyze_request_headers
 from self_11_header_performance_analyzer import analyze_header_performance_correlation
+from self_13_interface_error_analyzer import analyze_interface_errors
 from self_00_03_log_parser import collect_log_files, process_log_files
 #from self_02_service_analyzer import analyze_service_performance
 from self_02_service_analyzer_advanced import analyze_service_performance_advanced
@@ -76,6 +77,7 @@ def main():
         ip_analysis_output = os.path.join(output_dir, "08_IP来源分析.xlsx")
         header_analysis_output = os.path.join(output_dir, "10_请求头分析.xlsx")
         header_performance_output = os.path.join(output_dir, "11_请求头性能关联分析.xlsx")
+        interface_error_output = os.path.join(output_dir, "13_接口错误分析.xlsx")
         summary_output = os.path.join(output_dir, "12_综合报告.xlsx")
 
         # 定义基本分析任务
@@ -119,6 +121,10 @@ def main():
             {"name": "请求头性能关联分析", "func": analyze_header_performance_correlation, "args": {
                 "csv_path": temp_csv, "output_path": header_performance_output,
                 "slow_threshold": DEFAULT_SLOW_THRESHOLD
+            }},
+            {"name": "接口错误分析", "func": analyze_interface_errors, "args": {
+                "csv_path": temp_csv, "output_path": interface_error_output,
+                "slow_request_threshold": DEFAULT_SLOW_THRESHOLD
             }}
         ]
 
@@ -223,6 +229,19 @@ def main():
                         log_info("  优化建议：")
                         for recommendation in result['performance_recommendations'][:3]:
                             log_info(f"    - {recommendation}")
+            elif task_name == "接口错误分析":
+                outputs['interface_error_analysis'] = result
+                if result is not None and isinstance(result, dict):
+                    log_info(f"接口错误分析完成：")
+                    log_info(f"  全局错误率: {result.get('error_rate', 0):.2f}%")
+                    log_info(f"  错误接口数: {result.get('error_interfaces', 0)}")
+                    log_info(f"  受影响客户端: {result.get('affected_clients', 0)} 个")
+                    
+                    # 显示Top错误接口
+                    if result.get('top_error_interfaces'):
+                        log_info("  Top错误接口：")
+                        for i, (interface, error_count) in enumerate(result['top_error_interfaces'][:3], 1):
+                            log_info(f"    {i}. {interface}: {error_count} 次错误")
 
         # 生成综合报告
         log_info("生成综合报告...")
