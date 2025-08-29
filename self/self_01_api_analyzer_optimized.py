@@ -635,11 +635,13 @@ def generate_advanced_api_statistics(analyzer):
             '请求总数': total_requests,
             '成功请求数': success_requests,
             '错误请求数': stats['error_requests'],  # 新增
+            '占总请求比例(%)': global_request_ratio,
+            '频率估计': api_frequency_estimate,
+            
+            # 成功率统计
             '成功率(%)': success_rate,
             '错误率(%)': round((stats['error_requests'] / total_requests * 100), 2) if total_requests > 0 else 0,  # 新增
             '全局错误占比(%)': round((stats['error_requests'] / global_stats['error_requests'] * 100), 2) if global_stats['error_requests'] > 0 else 0,  # 新增
-            '占总请求比例(%)': global_request_ratio,
-            '频率估计': api_frequency_estimate,
             
             # 慢请求统计
             '慢请求数': slow_requests,
