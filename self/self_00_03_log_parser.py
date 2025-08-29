@@ -570,8 +570,11 @@ def batch_save_to_csv(data_iterator, csv_path, batch_size=DEFAULT_BATCH_SIZE):
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = None
         batch = []
+        first_row = None
 
         for row in data_iterator:
+            if first_row is None:
+                first_row = row
             batch.append(row)
             total_count += 1
 
@@ -589,11 +592,25 @@ def batch_save_to_csv(data_iterator, csv_path, batch_size=DEFAULT_BATCH_SIZE):
                     speed = total_count / elapsed if elapsed > 0 else 0
                     log_info(f"已处理 {total_count:,} 条记录 (速度: {speed:.2f} 条/秒)", show_memory=True)
 
+        # 处理剩余批次
         if batch:
             if not header_written and batch:
                 writer = csv.DictWriter(csvfile, fieldnames=batch[0].keys())
                 writer.writeheader()
+                header_written = True
             writer.writerows(batch)
+        
+        # 如果没有数据，至少创建带标准字段的空CSV文件
+        if total_count == 0:
+            # 创建标准字段
+            standard_fields = [
+                'timestamp', 'remote_addr', 'request_method', 'request_uri', 
+                'status', 'request_time', 'upstream_response_time', 
+                'http_user_agent', 'http_referer', 'service'
+            ]
+            writer = csv.DictWriter(csvfile, fieldnames=standard_fields)
+            writer.writeheader()
+            log_info(f"创建空CSV文件，包含标准字段: {csv_path}")
 
     elapsed = (datetime.now() - start_time).total_seconds()
     log_info(f"CSV保存完成: {csv_path} (总计: {total_count:,} 条记录, 耗时: {elapsed:.2f} 秒)")

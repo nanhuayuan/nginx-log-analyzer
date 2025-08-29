@@ -41,6 +41,25 @@ from self_00_05_sampling_algorithms import (
 )
 
 
+def safe_sort_dataframe(data_list, sort_column, ascending=False, default_columns=None):
+    """安全创建和排序DataFrame，处理空数据和缺失列"""
+    if not data_list:
+        # 使用默认列名创建空DataFrame
+        if default_columns:
+            return pd.DataFrame(columns=default_columns)
+        else:
+            return pd.DataFrame()
+    
+    df = pd.DataFrame(data_list)
+    
+    # 检查排序列是否存在
+    if sort_column in df.columns:
+        return df.sort_values(sort_column, ascending=ascending)
+    else:
+        log_info(f"警告: 排序列 '{sort_column}' 不存在于DataFrame中，返回未排序数据", level="ERROR")
+        return df
+
+
 class AdvancedPerformanceAnalyzer:
     """高级性能稳定性分析器"""
     
@@ -468,7 +487,12 @@ class AdvancedPerformanceAnalyzer:
                     '异常状态': status
                 })
         
-        return pd.DataFrame(service_stats).sort_values('成功率波动(标准差)', ascending=False)
+        # 使用安全排序函数
+        default_columns = [
+            '服务名称', '平均成功率(%)', '成功率波动(标准差)', '最低成功率(%)', 
+            '最高成功率(%)', '总请求数', '时段数量', '异常状态'
+        ]
+        return safe_sort_dataframe(service_stats, '成功率波动(标准差)', False, default_columns)
 
     def _finalize_response_time_analysis(self) -> pd.DataFrame:
         """完成响应时间分析 - 使用T-Digest分位数"""
@@ -522,7 +546,11 @@ class AdvancedPerformanceAnalyzer:
                         '异常状态': status
                     })
         
-        return pd.DataFrame(service_stats).sort_values('平均响应时间(秒)', ascending=False)
+        default_columns = [
+            '服务名称', '平均响应时间(秒)', 'P50响应时间(秒)', 'P95响应时间(秒)', 
+            'P99响应时间(秒)', '样本数量', '异常状态'
+        ]
+        return safe_sort_dataframe(service_stats, '平均响应时间(秒)', False, default_columns)
 
     def _finalize_resource_usage_analysis(self) -> pd.DataFrame:
         """完成资源使用分析"""
@@ -549,7 +577,11 @@ class AdvancedPerformanceAnalyzer:
                     '请求次数': data['count']
                 })
         
-        return pd.DataFrame(resource_results).sort_values('总传输流量(MB)', ascending=False)
+        default_columns = [
+            '服务名称', '请求方法', '总传输流量(MB)', '平均请求大小(KB)', 
+            '平均响应大小(KB)', '请求数量', '性能影响评分'
+        ]
+        return safe_sort_dataframe(resource_results, '总传输流量(MB)', False, default_columns)
 
     def _finalize_request_frequency_analysis(self) -> pd.DataFrame:
         """完成请求频率分析 - 使用采样数据"""
@@ -574,7 +606,11 @@ class AdvancedPerformanceAnalyzer:
                     '采样大小': len(samples)
                 })
         
-        return pd.DataFrame(frequency_results).sort_values('平均每分钟请求数(QPS)', ascending=False)
+        default_columns = [
+            '服务名称', '总请求数', '平均每分钟请求数(QPS)', '峰值每分钟请求数', 
+            '请求频率标准差', '时间跨度(分钟)', '频率稳定性'
+        ]
+        return safe_sort_dataframe(frequency_results, '平均每分钟请求数(QPS)', False, default_columns)
 
     def _finalize_concurrency_analysis(self) -> pd.DataFrame:
         """完成并发分析 - 使用采样数据"""
@@ -699,7 +735,11 @@ class AdvancedPerformanceAnalyzer:
                     '性能状态': status
                 })
         
-        return pd.DataFrame(backend_stats).sort_values('后端处理效率(%)', ascending=True)
+        default_columns = [
+            '服务名称', '后端连接时间(秒)', '后端处理时间(秒)', '后端总响应时间(秒)', 
+            '后端处理效率(%)', '请求数量', '性能状态'
+        ]
+        return safe_sort_dataframe(backend_stats, '后端处理效率(%)', True, default_columns)
 
     def _finalize_transfer_performance_analysis(self) -> pd.DataFrame:
         """完成传输性能分析 - 使用T-Digest分位数"""
@@ -737,7 +777,11 @@ class AdvancedPerformanceAnalyzer:
                     '传输状态': status
                 })
         
-        return pd.DataFrame(transfer_stats).sort_values('总传输速度(KB/s)', ascending=True)
+        default_columns = [
+            '服务名称', '总传输字节数', '总传输速度(KB/s)', '平均传输延迟(秒)', 
+            '传输效率评分', '请求数量', '传输状态'
+        ]
+        return safe_sort_dataframe(transfer_stats, '总传输速度(KB/s)', True, default_columns)
 
     def _finalize_nginx_lifecycle_analysis(self) -> pd.DataFrame:
         """完成Nginx生命周期分析 - 使用T-Digest分位数"""
@@ -775,7 +819,11 @@ class AdvancedPerformanceAnalyzer:
                     '生命周期状态': status
                 })
         
-        return pd.DataFrame(lifecycle_stats).sort_values('网络开销占比(%)', ascending=False)
+        default_columns = [
+            '服务名称', '总请求处理时间(秒)', '网络开销时间(秒)', '网络开销占比(%)', 
+            'Nginx处理效率', '请求数量', '生命周期状态'
+        ]
+        return safe_sort_dataframe(lifecycle_stats, '网络开销占比(%)', False, default_columns)
 
     def _calculate_anomaly_detection(self, results: Dict) -> None:
         """计算异常检测评分"""
@@ -924,7 +972,10 @@ class AdvancedPerformanceAnalyzer:
                 })
         
         if trend_data:
-            results['趋势分析'] = pd.DataFrame(trend_data).sort_values('变化幅度(%)', ascending=False)
+            default_columns = [
+                '指标名称', '当前值', '历史均值', '变化幅度(%)', '趋势方向', '异常状态'
+            ]
+            results['趋势分析'] = safe_sort_dataframe(trend_data, '变化幅度(%)', False, default_columns)
 
     def _save_to_excel(self, results: Dict, output_path: str) -> None:
         """保存结果到Excel"""

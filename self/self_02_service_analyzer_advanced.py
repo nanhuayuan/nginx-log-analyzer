@@ -240,6 +240,46 @@ class AdvancedServiceAnalyzer:
         # 数据清洗
         chunk = chunk.copy()
         
+        # 字段映射和兼容性处理
+        field_mappings = {
+            # 服务字段映射
+            'service_name': ['service_name', 'service'],
+            'application_name': ['application_name', 'app_name'],
+            # 状态码字段映射
+            'response_status_code': ['response_status_code', 'status'],
+            # 时间字段映射
+            'request_time': ['total_request_duration', 'request_time'],
+            'upstream_response_time': ['upstream_response_time', 'request_time'],
+            # IP字段映射
+            'remote_addr': ['client_ip_address', 'remote_addr'],
+            # 其他字段映射
+            'request_uri': ['request_full_uri', 'request_path', 'request_uri'],
+            'request_method': ['http_method', 'request_method'],
+        }
+        
+        # 应用字段映射
+        for target_field, source_fields in field_mappings.items():
+            if target_field not in chunk.columns:
+                for source_field in source_fields:
+                    if source_field in chunk.columns:
+                        chunk[target_field] = chunk[source_field]
+                        break
+                else:
+                    # 如果没有找到任何源字段，设置默认值
+                    if target_field in ['service_name', 'application_name']:
+                        chunk[target_field] = 'unknown'
+                    elif target_field == 'response_status_code':
+                        chunk[target_field] = '200'  # 默认成功状态
+                    elif target_field in ['request_time', 'upstream_response_time']:
+                        chunk[target_field] = 0.0
+                    else:
+                        chunk[target_field] = ''
+        
+        # 特殊处理：从service_name推导application_name
+        if chunk['application_name'].isna().all() or (chunk['application_name'] == 'unknown').all():
+            if not chunk['service_name'].isna().all():
+                chunk['application_name'] = chunk['service_name'].astype(str).str.split('_').str[0]
+        
         # 处理缺失值
         chunk['service_name'] = chunk['service_name'].fillna('unknown')
         chunk['application_name'] = chunk['application_name'].fillna('unknown')

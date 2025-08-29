@@ -292,14 +292,18 @@ class AdvancedTimeDimensionAnalyzer:
             indices = group.index
             stats = self.stats[dimension][time_key]
             
+            # 过滤有效索引，避免越界
+            valid_indices = [i for i in indices if i < len(success_mask)]
+            
             # 基础统计
             stats['total_requests'] += len(group)
-            stats['success_requests'] += success_mask[indices].sum()
-            stats['slow_requests'] += slow_mask[indices].sum()
-            
-            # 错误统计 (新增)
-            stats['error_4xx_requests'] += error_4xx_mask[indices].sum()
-            stats['error_5xx_requests'] += error_5xx_mask[indices].sum()
+            if valid_indices:
+                stats['success_requests'] += success_mask[valid_indices].sum()
+                stats['slow_requests'] += slow_mask[valid_indices].sum()
+                
+                # 错误统计 (新增)
+                stats['error_4xx_requests'] += error_4xx_mask[valid_indices].sum()
+                stats['error_5xx_requests'] += error_5xx_mask[valid_indices].sum()
             
             # 计算连接数指标
             self._calculate_connection_metrics(group, time_key, dimension, stats)

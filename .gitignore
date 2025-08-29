@@ -155,6 +155,6 @@ test_logs/
 .verysync/!/data/
 !/data/
 !/aliyun-log-download/dcdn_download_history.db
-CLAUDE.md
+#CLAUDE.md
 项目背景.txt
 Nginx日志下载需求.txt

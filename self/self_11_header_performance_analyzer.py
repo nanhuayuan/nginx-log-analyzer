@@ -277,11 +277,14 @@ def calculate_performance_metrics(performance_data):
 
 def generate_performance_insights(analysis_results, slow_threshold):
     """生成性能洞察"""
+    total_processed = analysis_results['total_processed']
+    total_slow_requests = analysis_results['total_slow_requests']
+    
     insights = {
         'slow_threshold': slow_threshold,
-        'total_processed': analysis_results['total_processed'],
-        'total_slow_requests': analysis_results['total_slow_requests'],
-        'slow_rate_overall': round(analysis_results['total_slow_requests'] / analysis_results['total_processed'] * 100, 2),
+        'total_processed': total_processed,
+        'total_slow_requests': total_slow_requests,
+        'slow_rate_overall': round(total_slow_requests / total_processed * 100, 2) if total_processed > 0 else 0,
         'worst_browsers': [],
         'worst_os': [],
         'worst_devices': [],

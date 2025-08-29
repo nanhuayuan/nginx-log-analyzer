@@ -16,6 +16,7 @@ Date: 2025-07-18
 """
 
 import gc
+import os
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook
@@ -148,14 +149,25 @@ class AdvancedStreamingApiAnalyzer:
         numeric_data = self._preprocess_numeric_data(successful_requests, field_mapping)
         
         # 提取时间戳用于分层采样
-        if 'timestamp' in chunk.columns:
-            timestamps = pd.to_datetime(chunk['timestamp'], errors='coerce')
+        if 'timestamp' in successful_requests.columns:
+            timestamps = pd.to_datetime(successful_requests['timestamp'], errors='coerce').reset_index(drop=True)
         else:
-            timestamps = pd.Series([datetime.now()] * len(chunk))
+            timestamps = pd.Series([datetime.now()] * len(successful_requests))
+        
+        # 重置索引以确保对齐
+        numeric_data = numeric_data.reset_index(drop=True)
+        timestamps = timestamps.reset_index(drop=True)
+        
+        # 为numeric_data添加时间戳列，避免索引问题
+        numeric_data['timestamp'] = timestamps
         
         # 按API分组处理
         for api, group_data in numeric_data.groupby('uri'):
-            self._process_api_group_advanced(api, group_data, field_mapping, timestamps.loc[group_data.index])
+            # 直接从group_data中获取时间戳列
+            group_timestamps = group_data['timestamp']
+            # 移除时间戳列，保持原有数据结构
+            group_data_clean = group_data.drop('timestamp', axis=1)
+            self._process_api_group_advanced(api, group_data_clean, field_mapping, group_timestamps)
         
         # 记录处理时间
         processing_time = (datetime.now() - start_time).total_seconds()
@@ -382,6 +394,26 @@ def analyze_api_performance_advanced(csv_path, output_path, success_codes=None, 
     chunk_size = max(DEFAULT_CHUNK_SIZE, 50000)
     success_codes = [str(code) for code in success_codes]
     start_time = datetime.now()
+    
+    # 检查CSV文件
+    if not os.path.exists(csv_path):
+        log_info(f"CSV文件不存在: {csv_path}", level="ERROR")
+        return pd.DataFrame()
+    
+    if os.path.getsize(csv_path) == 0:
+        log_info(f"CSV文件为空: {csv_path}", level="ERROR")
+        return pd.DataFrame()
+    
+    # 验证CSV文件是否有有效内容
+    try:
+        # 尝试读取第一行来验证文件格式
+        test_df = pd.read_csv(csv_path, nrows=1)
+        if test_df.empty:
+            log_info(f"CSV文件没有数据行: {csv_path}", level="ERROR")
+            return pd.DataFrame()
+    except Exception as e:
+        log_info(f"CSV文件格式错误: {csv_path}, 错误: {str(e)}", level="ERROR")
+        return pd.DataFrame()
     
     # 流式处理数据
     try:
