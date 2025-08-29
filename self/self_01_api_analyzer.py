@@ -85,7 +85,24 @@ class StreamingApiAnalyzer:
         chunk_rows = len(chunk)
         self.global_stats['total_requests'] += chunk_rows
         
-        # 筛选成功请求
+        # 先按API分组统计所有请求（包括失败请求）
+        all_requests_data = self._preprocess_all_requests_data(chunk, field_mapping)
+        for api, group_data in all_requests_data.groupby('uri'):
+            # 分别统计成功和总请求
+            success_mask = group_data['status'].astype(str).isin(success_codes)
+            total_count = len(group_data)
+            success_count = success_mask.sum()
+            
+            stats = self.api_stats[api]
+            stats['total_requests'] += total_count
+            
+            # 设置应用和服务名称
+            if not stats['app_name'] and 'app' in group_data.columns and not group_data['app'].isna().all():
+                stats['app_name'] = str(group_data['app'].iloc[0])
+            if not stats['service_name'] and 'service' in group_data.columns and not group_data['service'].isna().all():
+                stats['service_name'] = str(group_data['service'].iloc[0])
+        
+        # 筛选成功请求进行性能分析
         successful_requests = chunk[chunk[field_mapping['status']].astype(str).isin(success_codes)]
         success_count = len(successful_requests)
         self.global_stats['success_requests'] += success_count
@@ -96,9 +113,27 @@ class StreamingApiAnalyzer:
         # 预处理数据 - 向量化转换
         numeric_data = self._preprocess_numeric_data(successful_requests, field_mapping)
         
-        # 按API分组并批量处理
+        # 按API分组并批量处理（只处理成功请求的性能数据）
         for api, group_data in numeric_data.groupby('uri'):
             self._process_api_group(api, group_data, field_mapping)
+    
+    def _preprocess_all_requests_data(self, chunk, field_mapping):
+        """预处理所有请求数据（包括失败请求）"""
+        cols_to_process = {
+            'uri': field_mapping['uri'],
+            'app': field_mapping['app'],
+            'service': field_mapping['service'],
+            'status': field_mapping['status']
+        }
+        
+        data = {}
+        for key, col in cols_to_process.items():
+            if col and col in chunk.columns:
+                data[key] = chunk[col].fillna('').astype(str)
+            else:
+                data[key] = pd.Series([''] * len(chunk))
+        
+        return pd.DataFrame(data)
     
     def _preprocess_numeric_data(self, chunk, field_mapping):
         """预处理数字数据 - 向量化操作"""
@@ -136,8 +171,8 @@ class StreamingApiAnalyzer:
         group_size = len(group_data)
         stats = self.api_stats[api]
         
-        # 更新基础统计
-        stats['total_requests'] += group_size
+        # 更新基础统计（注意：group_data已经是过滤后的成功请求）
+        # 所以这里只更新success_requests，total_requests应该在处理所有请求时统计
         stats['success_requests'] += group_size
         
         # 设置应用和服务名称

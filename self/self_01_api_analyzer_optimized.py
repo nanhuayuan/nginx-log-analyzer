@@ -137,37 +137,46 @@ class AdvancedStreamingApiAnalyzer:
         self.processing_stats['total_records'] += chunk_rows
         self.processing_stats['chunks_processed'] += 1
         
-        # 筛选成功请求
+        # 先按API分组统计所有请求（包括失败请求）
+        all_requests_data = self._preprocess_all_requests_data(chunk, field_mapping)
+        
+        # 按API分组处理所有请求
+        for api, group_data in all_requests_data.groupby('uri'):
+            # 分别统计成功和失败请求
+            success_mask = group_data['status'].astype(str).isin(success_codes)
+            successful_group = group_data[success_mask]
+            
+            # 更新API级别的总请求统计
+            api_stats = self.api_stats[api]
+            api_stats['total_requests'] += len(group_data)
+            api_stats['success_requests'] += len(successful_group)
+            
+            # 设置应用和服务名称
+            if not api_stats['app_name'] and 'app' in group_data.columns and not group_data['app'].isna().all():
+                api_stats['app_name'] = str(group_data['app'].iloc[0])
+            if not api_stats['service_name'] and 'service' in group_data.columns and not group_data['service'].isna().all():
+                api_stats['service_name'] = str(group_data['service'].iloc[0])
+            
+            # 只对成功请求进行性能分析
+            if len(successful_group) > 0:
+                # 提取时间戳
+                if 'timestamp' in successful_group.columns:
+                    timestamps = pd.to_datetime(successful_group['timestamp'], errors='coerce').reset_index(drop=True)
+                else:
+                    timestamps = pd.Series([datetime.now()] * len(successful_group))
+                
+                # 重置索引并添加时间戳
+                successful_group_clean = successful_group.reset_index(drop=True).drop('timestamp', axis=1, errors='ignore')
+                successful_group_clean['timestamp'] = timestamps
+                
+                # 处理成功请求的性能数据
+                group_timestamps = successful_group_clean['timestamp']
+                performance_data = successful_group_clean.drop('timestamp', axis=1)
+                self._process_api_group_advanced(api, performance_data, field_mapping, group_timestamps, update_basic_stats=False)
+        
+        # 更新全局成功请求统计
         successful_requests = chunk[chunk[field_mapping['status']].astype(str).isin(success_codes)]
-        success_count = len(successful_requests)
-        self.global_stats['success_requests'] += success_count
-        
-        if success_count == 0:
-            return
-        
-        # 预处理数据
-        numeric_data = self._preprocess_numeric_data(successful_requests, field_mapping)
-        
-        # 提取时间戳用于分层采样
-        if 'timestamp' in successful_requests.columns:
-            timestamps = pd.to_datetime(successful_requests['timestamp'], errors='coerce').reset_index(drop=True)
-        else:
-            timestamps = pd.Series([datetime.now()] * len(successful_requests))
-        
-        # 重置索引以确保对齐
-        numeric_data = numeric_data.reset_index(drop=True)
-        timestamps = timestamps.reset_index(drop=True)
-        
-        # 为numeric_data添加时间戳列，避免索引问题
-        numeric_data['timestamp'] = timestamps
-        
-        # 按API分组处理
-        for api, group_data in numeric_data.groupby('uri'):
-            # 直接从group_data中获取时间戳列
-            group_timestamps = group_data['timestamp']
-            # 移除时间戳列，保持原有数据结构
-            group_data_clean = group_data.drop('timestamp', axis=1)
-            self._process_api_group_advanced(api, group_data_clean, field_mapping, group_timestamps)
+        self.global_stats['success_requests'] += len(successful_requests)
         
         # 记录处理时间
         processing_time = (datetime.now() - start_time).total_seconds()
@@ -176,6 +185,44 @@ class AdvancedStreamingApiAnalyzer:
         # 定期垃圾回收
         if self.processing_stats['chunks_processed'] % 50 == 0:
             gc.collect()
+    
+    def _preprocess_all_requests_data(self, chunk, field_mapping):
+        """预处理所有请求数据（包括失败请求）"""
+        cols_to_process = {
+            'uri': field_mapping['uri'],
+            'app': field_mapping['app'],
+            'service': field_mapping['service'],
+            'status': field_mapping['status'],
+            'request_time': field_mapping['request_time'],
+            'client_ip': field_mapping.get('client_ip', ''),
+            'timestamp': field_mapping.get('timestamp', '')
+        }
+        
+        data = {}
+        for key, col in cols_to_process.items():
+            # 确保col不为空且存在于chunk中
+            if col and str(col).strip() and col in chunk.columns:
+                try:
+                    if key in ['request_time']:
+                        # 数值字段
+                        data[key] = pd.to_numeric(chunk[col], errors='coerce').fillna(0)
+                    else:
+                        # 字符串字段
+                        data[key] = chunk[col].fillna('').astype(str)
+                except Exception as e:
+                    # 如果处理失败，使用默认值
+                    if key == 'request_time':
+                        data[key] = pd.Series([0.0] * len(chunk))
+                    else:
+                        data[key] = pd.Series([''] * len(chunk))
+            else:
+                # 如果字段不存在，提供默认值
+                if key == 'request_time':
+                    data[key] = pd.Series([0.0] * len(chunk))
+                else:
+                    data[key] = pd.Series([''] * len(chunk))
+        
+        return pd.DataFrame(data)
     
     def _preprocess_numeric_data(self, chunk, field_mapping):
         """预处理数字数据"""
@@ -197,20 +244,29 @@ class AdvancedStreamingApiAnalyzer:
         
         data = {}
         for key, col in cols_to_process.items():
-            if col and col in chunk.columns:
-                if key in ['uri', 'app', 'service', 'client_ip']:
-                    data[key] = chunk[col]
-                else:
-                    data[key] = pd.to_numeric(chunk[col], errors='coerce')
+            # 确保col不为空且存在于chunk中
+            if col and str(col).strip() and col in chunk.columns:
+                try:
+                    if key in ['uri', 'app', 'service', 'client_ip']:
+                        data[key] = chunk[col].fillna('').astype(str)
+                    else:
+                        data[key] = pd.to_numeric(chunk[col], errors='coerce').fillna(0)
+                except Exception as e:
+                    # 如果处理失败，使用默认值
+                    if key in ['uri', 'app', 'service', 'client_ip']:
+                        data[key] = pd.Series([''] * len(chunk))
+                    else:
+                        data[key] = pd.Series([0.0] * len(chunk))
             else:
+                # 字段不存在时使用默认值
                 if key in ['uri', 'app', 'service', 'client_ip']:
                     data[key] = pd.Series([''] * len(chunk))
                 else:
-                    data[key] = pd.Series([None] * len(chunk))
+                    data[key] = pd.Series([0.0] * len(chunk))
         
         return pd.DataFrame(data)
     
-    def _process_api_group_advanced(self, api, group_data, field_mapping, timestamps):
+    def _process_api_group_advanced(self, api, group_data, field_mapping, timestamps, update_basic_stats=True):
         """
         使用高级算法处理API组数据
         
@@ -219,13 +275,15 @@ class AdvancedStreamingApiAnalyzer:
             group_data: 组数据
             field_mapping: 字段映射
             timestamps: 时间戳序列
+            update_basic_stats: 是否更新基础统计（默认True，修复后设为False）
         """
         group_size = len(group_data)
         stats = self.api_stats[api]
         
-        # 更新基础统计
-        stats['total_requests'] += group_size
-        stats['success_requests'] += group_size
+        # 只在旧逻辑中更新基础统计（为了兼容性）
+        if update_basic_stats:
+            stats['total_requests'] += group_size
+            stats['success_requests'] += group_size
         
         # 设置应用和服务名称
         if not stats['app_name'] and not group_data['app'].isna().all():
@@ -266,39 +324,43 @@ class AdvancedStreamingApiAnalyzer:
         }
         
         for field, digest_key in phase_fields.items():
-            phase_data = group_data[field].dropna()
-            if len(phase_data) > 0:
-                stats[digest_key].add_batch(phase_data.tolist())
+            if field in group_data.columns:
+                phase_data = group_data[field].dropna()
+                if len(phase_data) > 0:
+                    stats[digest_key].add_batch(phase_data.tolist())
         
         # 处理大小数据 - 使用T-Digest和蓄水池采样
         size_fields = ['body_size', 'bytes_size']
         for field in size_fields:
-            size_data = group_data[field].dropna()
-            if len(size_data) > 0:
-                # 蓄水池采样
-                stats[f'{field}_reservoir'].add_batch(size_data.tolist())
-                
-                # 全局T-Digest
-                if field == 'body_size':
-                    self.global_stats['global_body_size_digest'].add_batch(size_data.tolist())
-                elif field == 'bytes_size':
-                    self.global_stats['global_bytes_size_digest'].add_batch(size_data.tolist())
+            if field in group_data.columns:
+                size_data = group_data[field].dropna()
+                if len(size_data) > 0:
+                    # 蓄水池采样
+                    stats[f'{field}_reservoir'].add_batch(size_data.tolist())
+                    
+                    # 全局T-Digest
+                    if field == 'body_size':
+                        self.global_stats['global_body_size_digest'].add_batch(size_data.tolist())
+                    elif field == 'bytes_size':
+                        self.global_stats['global_bytes_size_digest'].add_batch(size_data.tolist())
         
         # 处理性能指标
         perf_fields = ['transfer_speed', 'efficiency']
         for field in perf_fields:
-            perf_data = group_data[field].dropna()
-            if len(perf_data) > 0:
-                stats[f'{field}_reservoir'].add_batch(perf_data.tolist())
+            if field in group_data.columns:
+                perf_data = group_data[field].dropna()
+                if len(perf_data) > 0:
+                    stats[f'{field}_reservoir'].add_batch(perf_data.tolist())
         
         # API频率统计
         self.global_stats['api_frequency'].increment(api, group_size)
         
         # 独立IP统计
-        unique_ips = group_data['client_ip'].dropna().unique()
-        for ip in unique_ips:
-            if ip and str(ip) != '':
-                self.global_stats['unique_ips'].add(str(ip))
+        if 'client_ip' in group_data.columns:
+            unique_ips = group_data['client_ip'].dropna().unique()
+            for ip in unique_ips:
+                if ip and str(ip) != '':
+                    self.global_stats['unique_ips'].add(str(ip))
         
         # 分层采样（按小时）
         for i, timestamp in enumerate(timestamps):
