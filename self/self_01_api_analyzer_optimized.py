@@ -61,6 +61,7 @@ class AdvancedStreamingApiAnalyzer:
         self.api_stats = defaultdict(lambda: {
             'total_requests': 0,
             'success_requests': 0,
+            'error_requests': 0,  # 新增：错误请求数
             'slow_requests': 0,
             'app_name': '',
             'service_name': '',
@@ -93,6 +94,7 @@ class AdvancedStreamingApiAnalyzer:
         self.global_stats = {
             'total_requests': 0,
             'success_requests': 0,
+            'error_requests': 0,  # 新增：全局错误请求数
             'slow_requests': 0,
             
             # 全局T-Digest
@@ -148,8 +150,13 @@ class AdvancedStreamingApiAnalyzer:
             
             # 更新API级别的总请求统计
             api_stats = self.api_stats[api]
-            api_stats['total_requests'] += len(group_data)
-            api_stats['success_requests'] += len(successful_group)
+            total_count = len(group_data)
+            success_count = len(successful_group)
+            error_count = total_count - success_count
+            
+            api_stats['total_requests'] += total_count
+            api_stats['success_requests'] += success_count
+            api_stats['error_requests'] += error_count
             
             # 设置应用和服务名称
             if not api_stats['app_name'] and 'app' in group_data.columns and not group_data['app'].isna().all():
@@ -176,7 +183,11 @@ class AdvancedStreamingApiAnalyzer:
         
         # 更新全局成功请求统计
         successful_requests = chunk[chunk[field_mapping['status']].astype(str).isin(success_codes)]
-        self.global_stats['success_requests'] += len(successful_requests)
+        global_success_count = len(successful_requests)
+        global_error_count = chunk_rows - global_success_count
+        
+        self.global_stats['success_requests'] += global_success_count
+        self.global_stats['error_requests'] += global_error_count
         
         # 记录处理时间
         processing_time = (datetime.now() - start_time).total_seconds()
@@ -623,8 +634,11 @@ def generate_advanced_api_statistics(analyzer):
             # 请求统计
             '请求总数': total_requests,
             '成功请求数': success_requests,
-            '占总请求比例(%)': global_request_ratio,
+            '错误请求数': stats['error_requests'],  # 新增
             '成功率(%)': success_rate,
+            '错误率(%)': round((stats['error_requests'] / total_requests * 100), 2) if total_requests > 0 else 0,  # 新增
+            '全局错误占比(%)': round((stats['error_requests'] / global_stats['error_requests'] * 100), 2) if global_stats['error_requests'] > 0 else 0,  # 新增
+            '占总请求比例(%)': global_request_ratio,
             '频率估计': api_frequency_estimate,
             
             # 慢请求统计
@@ -698,7 +712,8 @@ def create_advanced_api_performance_excel(results_df, output_path, analyzer):
     main_headers = {
         "请求URI": ["请求URI"],
         "应用信息": ["应用名称", "服务名称"],
-        "请求统计": ["请求总数", "成功请求数", "占总请求比例(%)", "成功率(%)", "频率估计"],
+        "请求统计": ["请求总数", "成功请求数", "错误请求数", "占总请求比例(%)", "频率估计"],
+        "成功率统计": ["成功率(%)", "错误率(%)", "全局错误占比(%)"],
         "慢请求统计": ["慢请求数", "慢请求比例(%)", "全局慢请求占比(%)", "是否慢接口"],
         "T-Digest时间分析(秒)": ["平均", "中位数", "P90", "P95", "P99"],
         "蓄水池对比(秒)": ["中位数", "P95"],
@@ -716,8 +731,11 @@ def create_advanced_api_performance_excel(results_df, output_path, analyzer):
         '服务名称': '服务名称',
         '请求总数': '请求总数',
         '成功请求数': '成功请求数',
+        '错误请求数': '错误请求数',  # 新增
         '占总请求比例(%)': '占总请求比例(%)',
         '成功率(%)': '成功率(%)',
+        '错误率(%)': '错误率(%)',  # 新增
+        '全局错误占比(%)': '全局错误占比(%)',  # 新增
         '频率估计': '频率估计',
         '慢请求数': '慢请求数',
         '慢请求比例(%)': '慢请求比例(%)',
