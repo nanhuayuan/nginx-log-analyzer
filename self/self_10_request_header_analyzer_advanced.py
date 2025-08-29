@@ -236,29 +236,48 @@ def extract_browser_info(user_agent):
 
 
 def extract_os_info(user_agent):
-    """从User-Agent中提取操作系统信息"""
+    """从User-Agent中提取操作系统信息 - 改进版"""
     if not user_agent:
         return "未知系统"
     
-    user_agent = user_agent.lower()
+    user_agent_lower = user_agent.lower()
     
-    # 操作系统检测
+    # 操作系统检测 - 按优先级排序，SDK匹配优先于系统匹配
     os_patterns = [
+        # 应用SDK - 优先匹配，避免被系统匹配覆盖
+        ('iOS_SDK', r'(wst-sdk-ios|zgt-ios/)'),                   # iOS SDK
+        ('Android_SDK', r'(wst-sdk-android|zgt-android/)'),       # Android SDK
+        ('Java_SDK', r'(wst-sdk-java)'),                          # Java SDK
+        
+        # Windows系列 - 精确匹配
         ('Windows 10', r'windows nt 10\.0'),
         ('Windows 8.1', r'windows nt 6\.3'),
         ('Windows 8', r'windows nt 6\.2'),
         ('Windows 7', r'windows nt 6\.1'),
         ('Windows Vista', r'windows nt 6\.0'),
         ('Windows XP', r'windows nt 5\.1'),
-        ('macOS', r'mac os x|macos'),
-        ('iOS', r'iphone os|ios'),
-        ('Android', r'android'),
-        ('Linux', r'linux'),
-        ('Ubuntu', r'ubuntu')
+        
+        # macOS - 更精确匹配，避免匹配iOS设备
+        ('macOS', r'macintosh.*mac os x|macos'),
+        
+        # Android系统 - 更全面的匹配规则
+        ('Android', r'android \d+\.|android;|linux.*android|dalvik.*android'),  # 包括Dalvik虚拟机
+        
+        # iOS系统 - 真正的iOS设备
+        ('iOS', r'iphone os|ipad|ipod|cpu os.*like mac os x|ios \d+\.|cfnetwork.*darwin'),
+        
+        # 爬虫和其他工具
+        ('Bot/Spider', r'(spider|bot|crawler|curl|wget)'),
+        ('HTTP_Client', r'(okhttp|retrofit|volley|alamofire)'),    # HTTP客户端库
+        ('Development_Tool', r'(dart|flutter|postman)'),
+        
+        # Linux系列
+        ('Ubuntu', r'ubuntu'),
+        ('Linux', r'linux')
     ]
     
     for os_name, pattern in os_patterns:
-        if re.search(pattern, user_agent):
+        if re.search(pattern, user_agent_lower):
             return os_name
     
     return "其他系统"
