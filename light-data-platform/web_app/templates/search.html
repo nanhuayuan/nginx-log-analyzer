@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+
+{% block title %}数据查询 - 轻量级数据平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-search"></i> 数据查询</h1>
+        <p class="text-muted">基于多维度条件搜索和过滤nginx日志数据</p>
+        <hr>
+    </div>
+</div>
+
+<!-- 查询条件表单 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-filter"></i> 查询条件</h5>
+            </div>
+            <div class="card-body">
+                <form id="searchForm">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label class="form-label">平台</label>
+                            <select class="form-select" name="platform" id="platform">
+                                <option value="">全部平台</option>
+                                {% for platform in platforms %}
+                                <option value="{{ platform }}">{{ platform }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <label class="form-label">入口来源</label>
+                            <select class="form-select" name="entry_source" id="entry_source">
+                                <option value="">全部来源</option>
+                                {% for source in entry_sources %}
+                                <option value="{{ source }}">{{ source }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <label class="form-label">API分类</label>
+                            <select class="form-select" name="api_category" id="api_category">
+                                <option value="">全部分类</option>
+                                {% for category in api_categories %}
+                                <option value="{{ category }}">{{ category }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <label class="form-label">记录数限制</label>
+                            <select class="form-select" name="limit" id="limit">
+                                <option value="50">50条</option>
+                                <option value="100">100条</option>
+                                <option value="200">200条</option>
+                                <option value="500">500条</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <label class="form-label">开始时间</label>
+                            <div class="input-group">
+                                <input type="datetime-local" class="form-control" name="start_time" id="start_time">
+                                <button type="button" class="btn btn-outline-secondary" onclick="setCurrentTime('start_time')">
+                                    <i class="fas fa-clock"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="clearTime('start_time')">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted">选择开始时间，或留空查询所有</small>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <label class="form-label">结束时间</label>
+                            <div class="input-group">
+                                <input type="datetime-local" class="form-control" name="end_time" id="end_time">
+                                <button type="button" class="btn btn-outline-secondary" onclick="setCurrentTime('end_time')">
+                                    <i class="fas fa-clock"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="clearTime('end_time')">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted">选择结束时间，或留空查询所有</small>
+                        </div>
+                        
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary me-2">
+                                <i class="fas fa-search"></i> 查询
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="resetForm()">
+                                <i class="fas fa-undo"></i> 重置
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 快捷时间选择 -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <label class="form-label">快捷时间选择</label>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="setTimeRange('today')">
+                                    今天
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="setTimeRange('yesterday')">
+                                    昨天
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="setTimeRange('last1h')">
+                                    最近1小时
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="setTimeRange('last24h')">
+                                    最近24小时
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="setTimeRange('last7d')">
+                                    最近7天
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="setTimeRange('dataRange')">
+                                    数据范围(4月23日)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 查询结果 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-table"></i> 查询结果</h5>
+                <div>
+                    <span id="resultCount" class="badge bg-primary">0</span>
+                    <button id="exportBtn" class="btn btn-sm btn-success ms-2" style="display:none;">
+                        <i class="fas fa-download"></i> 导出
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="loading" class="loading" style="display:none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                    <p>正在查询数据...</p>
+                </div>
+                
+                <div id="noResults" style="display:none;">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-search" style="font-size: 3rem;"></i>
+                        <p class="mt-3">请设置查询条件并点击查询按钮</p>
+                    </div>
+                </div>
+                
+                <div id="resultsTable" style="display:none;">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>时间</th>
+                                    <th>平台</th>
+                                    <th>来源</th>
+                                    <th>API分类</th>
+                                    <th>请求URI</th>
+                                    <th>状态码</th>
+                                    <th>响应时间</th>
+                                    <th>状态</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentResults = [];
+
+document.getElementById('searchForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    performSearch();
+});
+
+function performSearch() {
+    const formData = new FormData(document.getElementById('searchForm'));
+    const params = new URLSearchParams();
+    
+    for (let [key, value] of formData.entries()) {
+        if (value.trim() !== '') {
+            params.append(key, value);
+        }
+    }
+    
+    // 显示加载状态
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('noResults').style.display = 'none';
+    document.getElementById('resultsTable').style.display = 'none';
+    
+    fetch(`/api/search?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('loading').style.display = 'none';
+            
+            if (data.status === 'success' && data.data.length > 0) {
+                displayResults(data.data);
+                currentResults = data.data;
+                document.getElementById('resultCount').textContent = data.data.length;
+                document.getElementById('exportBtn').style.display = 'inline-block';
+            } else if (data.status === 'success' && data.data.length === 0) {
+                showNoResults('没有找到符合条件的记录');
+            } else {
+                showNoResults('查询失败: ' + (data.message || '未知错误'));
+            }
+        })
+        .catch(error => {
+            document.getElementById('loading').style.display = 'none';
+            showNoResults('网络错误: ' + error.message);
+        });
+}
+
+function displayResults(results) {
+    const tbody = document.getElementById('resultsBody');
+    tbody.innerHTML = '';
+    
+    results.forEach(record => {
+        const row = document.createElement('tr');
+        
+        // 状态标识
+        let statusBadge = '';
+        if (record.has_anomaly) {
+            statusBadge = '<span class="badge bg-danger">异常</span>';
+        } else if (!record.is_success) {
+            statusBadge = '<span class="badge bg-warning">错误</span>';
+        } else if (record.is_slow) {
+            statusBadge = '<span class="badge bg-warning">慢</span>';
+        } else {
+            statusBadge = '<span class="badge bg-success">正常</span>';
+        }
+        
+        row.innerHTML = `
+            <td><small>${record.timestamp}</small></td>
+            <td><span class="badge bg-info">${record.platform}</span></td>
+            <td><span class="badge bg-secondary">${record.entry_source}</span></td>
+            <td><span class="badge bg-primary">${record.api_category}</span></td>
+            <td><code style="font-size:0.8em;">${record.request_uri}</code></td>
+            <td>
+                <span class="badge ${record.response_status_code === '200' ? 'bg-success' : 'bg-danger'}">
+                    ${record.response_status_code}
+                </span>
+            </td>
+            <td>
+                <span class="${record.response_time > 3 ? 'status-error' : record.response_time > 1 ? 'status-slow' : 'status-success'}">
+                    ${record.response_time.toFixed(3)}s
+                </span>
+            </td>
+            <td>${statusBadge}</td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+    
+    document.getElementById('resultsTable').style.display = 'block';
+}
+
+function showNoResults(message) {
+    document.getElementById('noResults').innerHTML = `
+        <div class="text-center text-muted">
+            <i class="fas fa-search" style="font-size: 3rem;"></i>
+            <p class="mt-3">${message}</p>
+        </div>
+    `;
+    document.getElementById('noResults').style.display = 'block';
+    document.getElementById('resultsTable').style.display = 'none';
+    document.getElementById('resultCount').textContent = '0';
+    document.getElementById('exportBtn').style.display = 'none';
+}
+
+function resetForm() {
+    document.getElementById('searchForm').reset();
+    document.getElementById('noResults').style.display = 'block';
+    document.getElementById('resultsTable').style.display = 'none';
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('resultCount').textContent = '0';
+    document.getElementById('exportBtn').style.display = 'none';
+    currentResults = [];
+}
+
+// 导出功能
+document.getElementById('exportBtn').addEventListener('click', function() {
+    if (currentResults.length === 0) return;
+    
+    // 创建CSV内容
+    const headers = ['时间', '平台', '入口来源', 'API分类', '请求URI', '状态码', '响应时间', '是否成功', '是否慢请求', '是否异常'];
+    const csvContent = [
+        headers.join(','),
+        ...currentResults.map(record => [
+            record.timestamp,
+            record.platform,
+            record.entry_source,
+            record.api_category,
+            `"${record.request_uri}"`,
+            record.response_status_code,
+            record.response_time,
+            record.is_success,
+            record.is_slow,
+            record.has_anomaly
+        ].join(','))
+    ].join('\n');
+    
+    // 下载文件
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `nginx_log_query_${new Date().getTime()}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+});
+
+// 页面加载时显示默认状态
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('noResults').style.display = 'block';
+    
+    // 监听全局时间变更
+    window.addEventListener('globalTimeChanged', function(event) {
+        const timeState = event.detail;
+        document.getElementById('start_time').value = timeState.startTime;
+        document.getElementById('end_time').value = timeState.endTime;
+        
+        // 自动执行查询（可选）
+        if (timeState.rangeType !== 'custom') {
+            performSearch();
+        }
+    });
+});
+
+// 时间处理相关函数
+function formatDateTimeLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function setCurrentTime(fieldId) {
+    const now = new Date();
+    document.getElementById(fieldId).value = formatDateTimeLocal(now);
+}
+
+function clearTime(fieldId) {
+    document.getElementById(fieldId).value = '';
+}
+
+function setTimeRange(rangeType) {
+    const now = new Date();
+    const startTimeField = document.getElementById('start_time');
+    const endTimeField = document.getElementById('end_time');
+    
+    let startTime, endTime;
+    
+    switch(rangeType) {
+        case 'today':
+            startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            endTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+            
+        case 'yesterday':
+            const yesterday = new Date(now);
+            yesterday.setDate(yesterday.getDate() - 1);
+            startTime = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0);
+            endTime = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59);
+            break;
+            
+        case 'last1h':
+            endTime = new Date(now);
+            startTime = new Date(now.getTime() - 60 * 60 * 1000);
+            break;
+            
+        case 'last24h':
+            endTime = new Date(now);
+            startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            break;
+            
+        case 'last7d':
+            endTime = new Date(now);
+            startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+            
+        case 'dataRange':
+            // 设置为数据的实际范围: 2025-04-23
+            startTime = new Date(2025, 3, 23, 0, 0, 0); // 月份从0开始，所以3代表4月
+            endTime = new Date(2025, 3, 23, 23, 59, 59);
+            break;
+            
+        default:
+            return;
+    }
+    
+    startTimeField.value = formatDateTimeLocal(startTime);
+    endTimeField.value = formatDateTimeLocal(endTime);
+}
+</script>
+{% endblock %}

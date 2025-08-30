@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}轻量级数据平台{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .navbar-brand { font-weight: bold; }
+        .card-metric { text-align: center; }
+        .metric-value { font-size: 2rem; font-weight: bold; }
+        .metric-label { color: #6c757d; }
+        .table-responsive { max-height: 500px; overflow-y: auto; }
+        .status-success { color: #28a745; }
+        .status-error { color: #dc3545; }
+        .status-slow { color: #ffc107; }
+        .loading { text-align: center; margin: 20px; }
+        
+        /* 全局时间选择器样式 */
+        .global-time-picker {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .time-picker-display {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 4px;
+            padding: 6px 12px;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 200px;
+            font-size: 0.9em;
+        }
+        
+        .time-picker-display:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .time-picker-panel {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            width: 380px;
+            z-index: 1050;
+            padding: 16px;
+            margin-top: 4px;
+            color: #333;
+            display: none;
+        }
+        
+        .time-shortcuts {
+            border-right: 1px solid #eee;
+            padding-right: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .time-shortcuts .shortcut-item {
+            display: block;
+            padding: 6px 12px;
+            border: none;
+            background: none;
+            text-align: left;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 2px;
+            font-size: 0.9em;
+            width: 100%;
+        }
+        
+        .time-shortcuts .shortcut-item:hover {
+            background: #f5f5f5;
+        }
+        
+        .time-shortcuts .shortcut-item.active {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .datetime-inputs {
+            padding-left: 12px;
+        }
+        
+        .datetime-inputs input {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .time-picker-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #eee;
+        }
+        
+        .btn-time {
+            padding: 6px 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        
+        .btn-time.btn-primary {
+            background: #007bff;
+            border-color: #007bff;
+            color: white;
+        }
+        
+        .time-select {
+            font-size: 0.85em;
+        }
+        
+        .recent-time-range {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            font-size: 0.8em;
+            cursor: pointer;
+            margin-bottom: 4px;
+        }
+        
+        .recent-time-range:hover {
+            background: #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-chart-line"></i> 轻量级数据平台
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/"><i class="fas fa-home"></i> 概览</a>
+                <a class="nav-link" href="/analysis"><i class="fas fa-analytics"></i> 分析</a>
+                <a class="nav-link" href="/search"><i class="fas fa-search"></i> 查询</a>
+                <a class="nav-link" href="/help"><i class="fas fa-question-circle"></i> 帮助</a>
+                
+                <!-- 全局时间选择器 -->
+                <div class="nav-item global-time-picker ms-3">
+                    <div class="time-picker-display" onclick="toggleTimePicker()">
+                        <i class="fas fa-clock"></i>
+                        <span id="globalTimeDisplay">数据范围: 4月23日</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    
+                    <div class="time-picker-panel" id="globalTimePicker">
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="time-shortcuts">
+                                    <button class="shortcut-item" data-range="1m">最近 1 分钟</button>
+                                    <button class="shortcut-item" data-range="2m">最近 2 分钟</button>
+                                    <button class="shortcut-item" data-range="3m">最近 3 分钟</button>
+                                    <button class="shortcut-item" data-range="5m">最近 5 分钟</button>
+                                    <button class="shortcut-item" data-range="15m">最近 15 分钟</button>
+                                    <button class="shortcut-item" data-range="30m">最近 30 分钟</button>
+                                    <button class="shortcut-item" data-range="1h">最近 1 小时</button>
+                                    <button class="shortcut-item" data-range="3h">最近 3 小时</button>
+                                    <button class="shortcut-item" data-range="6h">最近 6 小时</button>
+                                    <button class="shortcut-item" data-range="12h">最近 12 小时</button>
+                                    <button class="shortcut-item" data-range="24h">最近 24 小时</button>
+                                    <button class="shortcut-item" data-range="2d">最近 2 天</button>
+                                    <button class="shortcut-item" data-range="7d">最近 7 天</button>
+                                    <button class="shortcut-item" data-range="30d">最近 30 天</button>
+                                    <hr>
+                                    <button class="shortcut-item" data-range="yesterday">昨天</button>
+                                    <button class="shortcut-item" data-range="today">今天</button>
+                                    <button class="shortcut-item" data-range="thisweek">本周</button>
+                                    <button class="shortcut-item" data-range="thismonth">本月</button>
+                                    <hr>
+                                    <button class="shortcut-item active" data-range="dataRange">数据范围(4月23日)</button>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="datetime-inputs">
+                                    <div class="mb-3">
+                                        <label class="form-label">开始时间</label>
+                                        <input type="datetime-local" class="form-control" id="globalStartTime">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">结束时间</label>
+                                        <input type="datetime-local" class="form-control" id="globalEndTime">
+                                    </div>
+                                    
+                                    <!-- 最近使用的时间范围 -->
+                                    <div class="mb-3">
+                                        <label class="form-label">最近使用的时间范围</label>
+                                        <div id="recentTimeRanges" class="d-flex flex-wrap gap-1">
+                                            <small class="text-muted">暂无记录</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="time-picker-actions">
+                            <button class="btn-time" onclick="resetGlobalTime()">重置</button>
+                            <button class="btn-time btn-primary" onclick="applyGlobalTime()">确定</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    
+    <!-- 全局时间选择器JavaScript -->
+    <script>
+    // 全局时间状态
+    let globalTimeState = {
+        startTime: '',
+        endTime: '',
+        rangeType: 'dataRange',
+        displayText: '数据范围: 4月23日'
+    };
+
+    // 格式化日期时间为本地输入格式
+    function formatDateTimeLocal(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    // 切换时间选择器显示
+    function toggleTimePicker() {
+        const panel = document.getElementById('globalTimePicker');
+        panel.style.display = panel.style.display === 'none' || panel.style.display === '' ? 'block' : 'none';
+    }
+
+    // 点击外部关闭时间选择器
+    document.addEventListener('click', function(event) {
+        const picker = document.querySelector('.global-time-picker');
+        const panel = document.getElementById('globalTimePicker');
+        
+        if (picker && !picker.contains(event.target)) {
+            panel.style.display = 'none';
+        }
+    });
+
+    // 应用时间范围
+    function applyTimeRange(rangeType, customStart = null, customEnd = null) {
+        const now = new Date();
+        let startTime, endTime, displayText;
+        
+        switch(rangeType) {
+            case '1m':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 1 * 60 * 1000);
+                displayText = '最近 1 分钟';
+                break;
+            case '2m':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 2 * 60 * 1000);
+                displayText = '最近 2 分钟';
+                break;
+            case '3m':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 3 * 60 * 1000);
+                displayText = '最近 3 分钟';
+                break;
+            case '5m':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 5 * 60 * 1000);
+                displayText = '最近 5 分钟';
+                break;
+            case '15m':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 15 * 60 * 1000);
+                displayText = '最近 15 分钟';
+                break;
+            case '30m':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 30 * 60 * 1000);
+                displayText = '最近 30 分钟';
+                break;
+            case '1h':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 60 * 60 * 1000);
+                displayText = '最近 1 小时';
+                break;
+            case '3h':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+                displayText = '最近 3 小时';
+                break;
+            case '6h':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+                displayText = '最近 6 小时';
+                break;
+            case '12h':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+                displayText = '最近 12 小时';
+                break;
+            case '24h':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                displayText = '最近 24 小时';
+                break;
+            case '2d':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+                displayText = '最近 2 天';
+                break;
+            case '7d':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                displayText = '最近 7 天';
+                break;
+            case '30d':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                displayText = '最近 30 天';
+                break;
+            case 'yesterday':
+                const yesterday = new Date(now);
+                yesterday.setDate(yesterday.getDate() - 1);
+                startTime = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0);
+                endTime = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59);
+                displayText = '昨天';
+                break;
+            case 'today':
+                startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+                endTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+                displayText = '今天';
+                break;
+            case 'thisweek':
+                const weekStart = new Date(now);
+                weekStart.setDate(now.getDate() - now.getDay());
+                startTime = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate(), 0, 0, 0);
+                endTime = new Date(now);
+                displayText = '本周到现在';
+                break;
+            case 'thismonth':
+                startTime = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+                endTime = new Date(now);
+                displayText = '本月到现在';
+                break;
+            case 'dataRange':
+                startTime = new Date(2025, 3, 23, 0, 0, 0);
+                endTime = new Date(2025, 3, 23, 23, 59, 59);
+                displayText = '数据范围: 4月23日';
+                break;
+            case 'custom':
+                startTime = customStart;
+                endTime = customEnd;
+                displayText = '自定义时间';
+                break;
+            default:
+                return;
+        }
+        
+        // 更新全局状态
+        globalTimeState = {
+            startTime: startTime ? formatDateTimeLocal(startTime) : '',
+            endTime: endTime ? formatDateTimeLocal(endTime) : '',
+            rangeType: rangeType,
+            displayText: displayText
+        };
+        
+        // 更新显示
+        document.getElementById('globalTimeDisplay').textContent = displayText;
+        
+        // 更新输入框
+        document.getElementById('globalStartTime').value = globalTimeState.startTime;
+        document.getElementById('globalEndTime').value = globalTimeState.endTime;
+        
+        // 更新激活状态
+        document.querySelectorAll('.shortcut-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        const targetButton = document.querySelector(`[data-range="${rangeType}"]`);
+        if (targetButton) {
+            targetButton.classList.add('active');
+        }
+        
+        // 如果是自定义时间且有内容，添加到最近使用
+        if (rangeType === 'custom' && (startTime || endTime)) {
+            addToRecentTimeRanges(globalTimeState.startTime, globalTimeState.endTime, displayText);
+        }
+        
+        // 触发全局时间变更事件
+        window.dispatchEvent(new CustomEvent('globalTimeChanged', { 
+            detail: globalTimeState 
+        }));
+    }
+
+    // 重置时间
+    function resetGlobalTime() {
+        applyTimeRange('dataRange');
+    }
+
+    // 应用自定义时间
+    function applyGlobalTime() {
+        const startTime = document.getElementById('globalStartTime').value;
+        const endTime = document.getElementById('globalEndTime').value;
+        
+        if (startTime || endTime) {
+            const start = startTime ? new Date(startTime) : null;
+            const end = endTime ? new Date(endTime) : null;
+            applyTimeRange('custom', start, end);
+        }
+        
+        // 关闭选择器
+        document.getElementById('globalTimePicker').style.display = 'none';
+    }
+
+    
+    // 最近使用的时间范围管理
+    let recentTimeRanges = JSON.parse(localStorage.getItem('recentTimeRanges') || '[]');
+    
+    function addToRecentTimeRanges(startTime, endTime, displayText) {
+        const range = { startTime, endTime, displayText, timestamp: Date.now() };
+        
+        // 移除重复项
+        recentTimeRanges = recentTimeRanges.filter(r => r.displayText !== displayText);
+        
+        // 添加到开头
+        recentTimeRanges.unshift(range);
+        
+        // 保留最近10个
+        recentTimeRanges = recentTimeRanges.slice(0, 10);
+        
+        // 保存到localStorage
+        localStorage.setItem('recentTimeRanges', JSON.stringify(recentTimeRanges));
+        
+        // 更新显示
+        updateRecentTimeRangesDisplay();
+    }
+    
+    function updateRecentTimeRangesDisplay() {
+        const container = document.getElementById('recentTimeRanges');
+        
+        if (recentTimeRanges.length === 0) {
+            container.innerHTML = '<small class="text-muted">暂无记录</small>';
+            return;
+        }
+        
+        const html = recentTimeRanges.map(range => 
+            `<span class="recent-time-range" onclick="applyRecentTimeRange('${range.startTime}', '${range.endTime}', '${range.displayText}')">${range.displayText}</span>`
+        ).join('');
+        
+        container.innerHTML = html;
+    }
+    
+    function applyRecentTimeRange(startTime, endTime, displayText) {
+        const start = startTime ? new Date(startTime) : null;
+        const end = endTime ? new Date(endTime) : null;
+        applyTimeRange('custom', start, end);
+        globalTimeState.displayText = displayText;
+        document.getElementById('globalTimeDisplay').textContent = displayText;
+    }
+
+    // 绑定快捷按钮事件
+    document.addEventListener('DOMContentLoaded', function() {
+        // 更新最近使用显示
+        updateRecentTimeRangesDisplay();
+        
+        document.querySelectorAll('.shortcut-item').forEach(item => {
+            item.addEventListener('click', function() {
+                applyTimeRange(this.dataset.range);
+            });
+        });
+        
+        // 初始化默认时间
+        applyTimeRange('dataRange');
+    });
+
+    // 暴露全局函数供其他页面使用
+    window.getGlobalTimeState = function() {
+        return globalTimeState;
+    };
+
+    window.setGlobalTimeRange = function(rangeType) {
+        applyTimeRange(rangeType);
+    };
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

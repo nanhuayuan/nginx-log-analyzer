@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}数据概览 - 轻量级数据平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-tachometer-alt"></i> 数据概览Dashboard</h1>
+        <hr>
+    </div>
+</div>
+
+<!-- 核心指标卡片 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body card-metric">
+                <div class="metric-value">{{ dwd_stats.total_records|default(0) }}</div>
+                <div class="metric-label">总请求数</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body card-metric">
+                <div class="metric-value">{{ "%.1f"|format(dwd_stats.success_rate|default(0)) }}%</div>
+                <div class="metric-label">成功率</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body card-metric">
+                <div class="metric-value">{{ "%.1f"|format(dwd_stats.slow_rate|default(0)) }}%</div>
+                <div class="metric-label">慢请求率</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body card-metric">
+                <div class="metric-value">{{ "%.1f"|format(dwd_stats.anomaly_rate|default(0)) }}%</div>
+                <div class="metric-label">异常率</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 维度分布图表 -->
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-mobile-alt"></i> 平台分布</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="platformChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-external-link-alt"></i> 入口来源</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="entrySourceChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-code"></i> API分类</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="apiCategoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 快速操作 -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-bolt"></i> 快速操作</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <a href="/analysis" class="btn btn-primary btn-lg w-100">
+                            <i class="fas fa-chart-bar"></i><br>多维度分析
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="/search" class="btn btn-info btn-lg w-100">
+                            <i class="fas fa-search"></i><br>数据查询
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-success btn-lg w-100" onclick="refreshData()">
+                            <i class="fas fa-sync-alt"></i><br>刷新数据
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="/help" class="btn btn-secondary btn-lg w-100">
+                            <i class="fas fa-question-circle"></i><br>使用帮助
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 图表配置
+const chartOptions = {
+    responsive: true,
+    plugins: {
+        legend: {
+            position: 'bottom'
+        }
+    }
+};
+
+// 平台分布饼图
+const platformData = {
+    labels: [
+        {% for platform, count in dwd_stats.platform_distribution.items() %}
+        '{{ platform }}',
+        {% endfor %}
+    ],
+    datasets: [{
+        data: [
+            {% for platform, count in dwd_stats.platform_distribution.items() %}
+            {{ count }},
+            {% endfor %}
+        ],
+        backgroundColor: [
+            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
+        ]
+    }]
+};
+
+new Chart(document.getElementById('platformChart'), {
+    type: 'doughnut',
+    data: platformData,
+    options: chartOptions
+});
+
+// 入口来源饼图
+const entrySourceData = {
+    labels: [
+        {% for source, count in dwd_stats.entry_source_distribution.items() %}
+        '{{ source }}',
+        {% endfor %}
+    ],
+    datasets: [{
+        data: [
+            {% for source, count in dwd_stats.entry_source_distribution.items() %}
+            {{ count }},
+            {% endfor %}
+        ],
+        backgroundColor: [
+            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'
+        ]
+    }]
+};
+
+new Chart(document.getElementById('entrySourceChart'), {
+    type: 'doughnut',
+    data: entrySourceData,
+    options: chartOptions
+});
+
+// API分类饼图
+const apiCategoryData = {
+    labels: [
+        {% for category, count in dwd_stats.api_category_distribution.items() %}
+        '{{ category }}',
+        {% endfor %}
+    ],
+    datasets: [{
+        data: [
+            {% for category, count in dwd_stats.api_category_distribution.items() %}
+            {{ count }},
+            {% endfor %}
+        ],
+        backgroundColor: [
+            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'
+        ]
+    }]
+};
+
+new Chart(document.getElementById('apiCategoryChart'), {
+    type: 'doughnut',
+    data: apiCategoryData,
+    options: chartOptions
+});
+
+// 刷新数据函数
+function refreshData() {
+    location.reload();
+}
+</script>
+{% endblock %}

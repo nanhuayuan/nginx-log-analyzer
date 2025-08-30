@@ -1,0 +1,24 @@
+# 核心框架
+Flask==2.3.3
+pandas==2.1.1
+sqlalchemy==2.0.21
+sqlite3  # Python内置，无需安装
+
+# 数据处理
+numpy==1.24.3
+python-dateutil==2.8.2
+
+# 任务调度
+APScheduler==3.10.4
+
+# Web开发
+Flask-CORS==4.0.0
+Jinja2==3.1.2
+
+# 可选：性能优化
+# clickhouse-driver==0.2.6  # 后续升级ClickHouse时使用
+# elasticsearch==8.9.0      # 后续集成ES时使用
+
+# 开发工具
+pytest==7.4.2
+requests==2.31.0

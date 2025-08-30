@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}{{ platform }} 平台详细分析 - 轻量级数据平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-mobile-alt"></i> {{ platform }} 平台详细分析</h1>
+        <p class="text-muted">{{ platform }} 平台的详细性能指标和API分布</p>
+        <hr>
+    </div>
+</div>
+
+<!-- 加载状态 -->
+<div id="loading" class="loading" style="display:none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">加载中...</span>
+    </div>
+    <p>正在加载 {{ platform }} 平台数据...</p>
+</div>
+
+<!-- 平台概览指标 -->
+<div id="platformOverview" style="display:none;">
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 id="totalRequests" class="text-primary">0</h3>
+                    <p class="card-text text-muted">总请求数</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 id="successRate" class="text-success">0%</h3>
+                    <p class="card-text text-muted">成功率</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 id="slowRate" class="text-warning">0%</h3>
+                    <p class="card-text text-muted">慢请求率</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 id="avgResponseTime" class="text-info">0s</h3>
+                    <p class="card-text text-muted">平均响应时间</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 响应时间统计 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-clock"></i> 响应时间统计</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h4 id="minResponseTime" class="text-success">0s</h4>
+                                    <p class="card-text">最小响应时间</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h4 id="maxResponseTime" class="text-danger">0s</h4>
+                                    <p class="card-text">最大响应时间</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h4 id="avgResponseTimeDetail" class="text-info">0s</h4>
+                                    <p class="card-text">平均响应时间</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API分类分布 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-pie"></i> API分类分布</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <canvas id="apiChart" width="400" height="200"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <div id="apiStats">
+                                <!-- API统计表格将在这里生成 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-tools"></i> 操作</h5>
+                </div>
+                <div class="card-body">
+                    <a href="/search?platform={{ platform }}" class="btn btn-primary me-2">
+                        <i class="fas fa-search"></i> 查看详细日志
+                    </a>
+                    <a href="/analysis" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> 返回分析页面
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 错误显示 -->
+<div id="errorMessage" class="alert alert-danger" style="display:none;">
+    <h4>加载失败</h4>
+    <p id="errorText"></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let platformData = null;
+
+// 页面加载时获取平台数据
+document.addEventListener('DOMContentLoaded', function() {
+    loadPlatformData();
+});
+
+function loadPlatformData() {
+    // 显示加载状态
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('platformOverview').style.display = 'none';
+    document.getElementById('errorMessage').style.display = 'none';
+    
+    // 获取平台数据
+    fetch(`/api/platform/{{ platform }}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('loading').style.display = 'none';
+            
+            if (data.status === 'success') {
+                platformData = data.data;
+                displayPlatformData();
+                document.getElementById('platformOverview').style.display = 'block';
+            } else {
+                showError('获取平台数据失败: ' + (data.message || '未知错误'));
+            }
+        })
+        .catch(error => {
+            document.getElementById('loading').style.display = 'none';
+            showError('网络错误: ' + error.message);
+        });
+}
+
+function displayPlatformData() {
+    if (!platformData) return;
+    
+    // 更新概览指标
+    document.getElementById('totalRequests').textContent = platformData.total_requests.toLocaleString();
+    
+    const successRate = platformData.success_rate;
+    document.getElementById('successRate').textContent = successRate + '%';
+    document.getElementById('successRate').className = successRate >= 95 ? 'text-success' : (successRate >= 80 ? 'text-warning' : 'text-danger');
+    
+    const slowRate = platformData.slow_rate;
+    document.getElementById('slowRate').textContent = slowRate + '%';
+    document.getElementById('slowRate').className = slowRate <= 5 ? 'text-success' : (slowRate <= 15 ? 'text-warning' : 'text-danger');
+    
+    const avgTime = platformData.response_time.avg;
+    document.getElementById('avgResponseTime').textContent = avgTime + 's';
+    document.getElementById('avgResponseTime').className = avgTime <= 1 ? 'text-success' : (avgTime <= 3 ? 'text-warning' : 'text-danger');
+    
+    // 更新响应时间详细统计
+    document.getElementById('minResponseTime').textContent = platformData.response_time.min + 's';
+    document.getElementById('maxResponseTime').textContent = platformData.response_time.max + 's';
+    document.getElementById('avgResponseTimeDetail').textContent = platformData.response_time.avg + 's';
+    
+    // 生成API分布图表和统计表
+    createApiChart();
+    createApiStatsTable();
+}
+
+function createApiChart() {
+    const ctx = document.getElementById('apiChart').getContext('2d');
+    const apiDistribution = platformData.api_distribution;
+    
+    const labels = Object.keys(apiDistribution);
+    const data = Object.values(apiDistribution);
+    
+    // 生成随机颜色
+    const colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', 
+        '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+    ];
+    
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors.slice(0, labels.length),
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'right'
+                },
+                title: {
+                    display: true,
+                    text: '{{ platform }} API分类分布'
+                }
+            }
+        }
+    });
+}
+
+function createApiStatsTable() {
+    const apiDistribution = platformData.api_distribution;
+    const total = platformData.total_requests;
+    
+    let html = '<table class="table table-striped table-sm">';
+    html += '<thead><tr><th>API分类</th><th>请求数</th><th>占比</th></tr></thead>';
+    html += '<tbody>';
+    
+    for (const [category, count] of Object.entries(apiDistribution)) {
+        const percentage = ((count / total) * 100).toFixed(1);
+        html += `
+            <tr>
+                <td><strong>${category}</strong></td>
+                <td>${count.toLocaleString()}</td>
+                <td>${percentage}%</td>
+            </tr>
+        `;
+    }
+    
+    html += '</tbody></table>';
+    document.getElementById('apiStats').innerHTML = html;
+}
+
+function showError(message) {
+    document.getElementById('errorText').textContent = message;
+    document.getElementById('errorMessage').style.display = 'block';
+}
+</script>
+{% endblock %}

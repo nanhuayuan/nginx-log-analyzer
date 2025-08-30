@@ -1,0 +1,106 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- 日志配置 -->
+    <logger>
+        <level>information</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+        <size>1000M</size>
+        <count>10</count>
+    </logger>
+
+    <!-- 数据目录 -->
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+    <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+
+    <!-- 网络配置 -->
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+    <interserver_http_port>9009</interserver_http_port>
+
+    <!-- 内存和性能配置 -->
+    <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+    <max_concurrent_queries>100</max_concurrent_queries>
+    <max_thread_pool_size>10000</max_thread_pool_size>
+    
+    <!-- 查询缓存 -->
+    <query_cache>
+        <max_size_in_bytes>1073741824</max_size_in_bytes>
+        <max_entries>1024</max_entries>
+        <max_entry_size_in_bytes>1048576</max_entry_size_in_bytes>
+    </query_cache>
+
+    <!-- 数据压缩 -->
+    <compression>
+        <case>
+            <method>zstd</method>
+            <level>3</level>
+        </case>
+    </compression>
+
+    <!-- 用户配置文件 -->
+    <users_config>/etc/clickhouse-server/users.xml</users_config>
+
+    <!-- 默认数据库 -->
+    <default_database>nginx_analytics</default_database>
+
+    <!-- 时区设置 -->
+    <timezone>Asia/Shanghai</timezone>
+
+    <!-- 分布式DDL配置 -->
+    <distributed_ddl>
+        <path>/clickhouse/task_queue/ddl</path>
+    </distributed_ddl>
+
+    <!-- 数据保留策略 -->
+    <merge_tree>
+        <max_suspicious_broken_parts>10</max_suspicious_broken_parts>
+        <parts_to_throw_insert>600</parts_to_throw_insert>
+        <parts_to_delay_insert>150</parts_to_delay_insert>
+        <max_delay_to_insert>1</max_delay_to_insert>
+        <max_parts_in_total>100000</max_parts_in_total>
+        <max_bytes_to_merge_at_max_space_in_pool>161061273600</max_bytes_to_merge_at_max_space_in_pool>
+    </merge_tree>
+
+    <!-- 远程服务器配置 (集群扩展用) -->
+    <remote_servers incl="clickhouse_remote_servers" optional="true" />
+
+    <!-- macros配置 (集群扩展用) -->
+    <macros incl="macros" optional="true" />
+
+    <!-- 内置字典 -->
+    <builtin_dictionaries_reload_interval>3600</builtin_dictionaries_reload_interval>
+
+    <!-- 查询日志 -->
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 30 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <!-- 查询线程日志 -->
+    <query_thread_log>
+        <database>system</database>
+        <table>query_thread_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 30 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_thread_log>
+
+    <!-- 部分日志 -->
+    <part_log>
+        <database>system</database>
+        <table>part_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 30 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </part_log>
+
+    <!-- 格式化配置 -->
+    <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+</clickhouse>

@@ -1,0 +1,101 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: nginx-analytics-clickhouse
+    hostname: clickhouse
+    ports:
+      - "8123:8123"    # HTTP interface
+      - "9000:9000"    # Native TCP interface  
+      - "9009:9009"    # HTTP interface for inter-server communication
+    volumes:
+      # 数据持久化
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      # 配置文件
+      - ./clickhouse_config/config.xml:/etc/clickhouse-server/config.xml:ro
+      - ./clickhouse_config/users.xml:/etc/clickhouse-server/users.xml:ro
+      # 初始化SQL脚本
+      - ./clickhouse_init:/docker-entrypoint-initdb.d
+    environment:
+      CLICKHOUSE_DB: nginx_analytics
+      CLICKHOUSE_USER: analytics_user
+      CLICKHOUSE_PASSWORD: analytics_password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - clickhouse_network
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  # ClickHouse客户端工具 (可选)
+  clickhouse-client:
+    image: clickhouse/clickhouse-client:latest
+    container_name: nginx-analytics-clickhouse-client
+    depends_on:
+      - clickhouse
+    networks:
+      - clickhouse_network
+    profiles:
+      - tools
+    entrypoint: ["tail", "-f", "/dev/null"]  # 保持容器运行，用于手动连接
+
+  # Grafana 可视化界面 (可选)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: nginx-analytics-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - clickhouse
+    networks:
+      - clickhouse_network
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+  # Nginx反向代理 (可选，用于生产环境)
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-analytics-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - clickhouse
+    networks:
+      - clickhouse_network
+    profiles:
+      - production
+    restart: unless-stopped
+
+volumes:
+  clickhouse_data:
+    driver: local
+  clickhouse_logs:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  clickhouse_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

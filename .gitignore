@@ -158,3 +158,6 @@ test_logs/
 #CLAUDE.md
 项目背景.txt
 Nginx日志下载需求.txt
+/light-data-platform/database/
+/light-data-platform/backups/
+/light-data-platform/sample_nginx_logs/

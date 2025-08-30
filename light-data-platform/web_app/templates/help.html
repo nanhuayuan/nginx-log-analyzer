@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}使用帮助 - 轻量级数据平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-question-circle"></i> 使用帮助</h1>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header">
+                <h6>快速导航</h6>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <a href="#overview" class="list-group-item list-group-item-action">平台概述</a>
+                    <a href="#features" class="list-group-item list-group-item-action">功能介绍</a>
+                    <a href="#dimensions" class="list-group-item list-group-item-action">维度说明</a>
+                    <a href="#usage" class="list-group-item list-group-item-action">使用指南</a>
+                    <a href="#faq" class="list-group-item list-group-item-action">常见问题</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-9">
+        <!-- 平台概述 -->
+        <div class="card mb-4" id="overview">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> 平台概述</h5>
+            </div>
+            <div class="card-body">
+                <p>轻量级数据平台是基于nginx日志的多维度分析系统，旨在解决传统聚合分析中的"信息失真"问题。</p>
+                <h6>核心价值：</h6>
+                <ul>
+                    <li><strong>维度分析</strong>: 按平台、入口来源、API分类等维度精确定位问题</li>
+                    <li><strong>实时洞察</strong>: 快速发现性能瓶颈和异常模式</li>
+                    <li><strong>交互查询</strong>: 支持灵活的条件筛选和数据导出</li>
+                    <li><strong>扩展性</strong>: 预留接口支持升级到大数据平台</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- 功能介绍 -->
+        <div class="card mb-4" id="features">
+            <div class="card-header">
+                <h5><i class="fas fa-cogs"></i> 功能介绍</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-tachometer-alt"></i> 数据概览</h6>
+                        <ul>
+                            <li>总体请求量、成功率、慢请求率统计</li>
+                            <li>平台分布、入口来源、API分类图表</li>
+                            <li>实时数据刷新</li>
+                        </ul>
+                        
+                        <h6><i class="fas fa-chart-bar"></i> 多维度分析</h6>
+                        <ul>
+                            <li>平台维度：按iOS/Android/Web等平台分析</li>
+                            <li>来源维度：按External/Internal等来源分析</li>
+                            <li>API维度：按业务功能分类分析</li>
+                            <li>智能问题识别和建议</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-search"></i> 数据查询</h6>
+                        <ul>
+                            <li>多条件组合筛选</li>
+                            <li>时间范围选择</li>
+                            <li>结果数量控制</li>
+                            <li>CSV格式数据导出</li>
+                        </ul>
+                        
+                        <h6><i class="fas fa-mobile-alt"></i> 平台详细分析</h6>
+                        <ul>
+                            <li>单个平台深度分析</li>
+                            <li>响应时间分布统计</li>
+                            <li>API调用模式分析</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 维度说明 -->
+        <div class="card mb-4" id="dimensions">
+            <div class="card-header">
+                <h5><i class="fas fa-tags"></i> 维度说明</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>维度</th>
+                                <th>说明</th>
+                                <th>分类</th>
+                                <th>应用场景</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>平台</strong></td>
+                                <td>客户端平台识别</td>
+                                <td>iOS_SDK, Android_SDK, iOS, Android, Web等</td>
+                                <td>定位特定平台性能问题</td>
+                            </tr>
+                            <tr>
+                                <td><strong>入口来源</strong></td>
+                                <td>请求来源渠道</td>
+                                <td>Internal(微信), External(外部), Direct等</td>
+                                <td>分析不同渠道性能差异</td>
+                            </tr>
+                            <tr>
+                                <td><strong>API分类</strong></td>
+                                <td>接口功能分类</td>
+                                <td>User_Auth, Business_Core, Static_Resource等</td>
+                                <td>识别业务功能性能瓶颈</td>
+                            </tr>
+                            <tr>
+                                <td><strong>版本信息</strong></td>
+                                <td>应用版本识别</td>
+                                <td>从User-Agent提取版本号</td>
+                                <td>版本发布质量监控</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 使用指南 -->
+        <div class="card mb-4" id="usage">
+            <div class="card-header">
+                <h5><i class="fas fa-book"></i> 使用指南</h5>
+            </div>
+            <div class="card-body">
+                <h6>1. 数据加载</h6>
+                <p>平台自动从CSV文件加载nginx日志数据，支持以下格式：</p>
+                <pre><code>timestamp, client_ip, request_method, request_full_uri, response_status_code, 
+total_request_duration, user_agent, referer, application_name, service_name</code></pre>
+                
+                <h6>2. 问题定位流程</h6>
+                <ol>
+                    <li><strong>概览检查</strong>: 查看整体成功率、慢请求率是否正常</li>
+                    <li><strong>维度分析</strong>: 识别哪个平台/来源/API类型有问题</li>
+                    <li><strong>详细查询</strong>: 使用搜索功能深入分析具体请求</li>
+                    <li><strong>数据导出</strong>: 导出相关数据进行进一步分析</li>
+                </ol>
+                
+                <h6>3. 性能指标说明</h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul>
+                            <li><strong>成功率</strong>: HTTP 200状态码请求比例</li>
+                            <li><strong>慢请求率</strong>: 响应时间>3秒的请求比例</li>
+                            <li><strong>异常率</strong>: 系统检测到的异常请求比例</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul>
+                            <li><strong>数据质量评分</strong>: 数据完整性评分(0-1)</li>
+                            <li><strong>响应时间</strong>: 从请求到响应的耗时</li>
+                            <li><strong>流量分布</strong>: 各维度请求量分布</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 常见问题 -->
+        <div class="card mb-4" id="faq">
+            <div class="card-header">
+                <h5><i class="fas fa-question"></i> 常见问题</h5>
+            </div>
+            <div class="card-body">
+                <div class="accordion" id="faqAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq1">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse1">
+                                为什么某个平台占比异常高？
+                            </button>
+                        </h2>
+                        <div id="collapse1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                可能原因：1) User-Agent解析规则过于宽泛 2) 某个平台确实流量激增 3) 数据采样偏差。
+                                建议查看平台详细分析页面，检查具体的User-Agent样本。
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq2">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse2">
+                                如何理解"信息失真"问题？
+                            </button>
+                        </h2>
+                        <div id="collapse2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                传统聚合分析混合了所有维度，例如：总体成功率95%看起来正常，但可能iOS成功率99%而Android仅85%。
+                                通过维度分析可以精确定位问题平台，避免被平均数掩盖真实问题。
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq3">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse3">
+                                平台性能瓶颈在哪里？
+                            </button>
+                        </h2>
+                        <div id="collapse3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                当前SQLite适合10万条以下数据。如需处理更大数据量，建议升级到ClickHouse或Elasticsearch。
+                                数据富化处理能力约18,000条/秒，查询响应时间<100ms。
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq4">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse4">
+                                如何扩展维度分类？
+                            </button>
+                        </h2>
+                        <div id="collapse4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                修改 config/settings.py 中的 DIMENSIONS 配置，添加新的正则表达式模式。
+                                平台识别、API分类、入口来源等都支持自定义规则。修改后重新处理数据即可生效。
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

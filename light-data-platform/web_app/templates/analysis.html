@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}多维度分析 - 轻量级数据平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-chart-bar"></i> 多维度分析</h1>
+        <p class="text-muted">通过不同维度发现性能问题和业务洞察</p>
+        <hr>
+    </div>
+</div>
+
+<!-- 平台维度分析 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-mobile-alt"></i> 平台维度分析</h5>
+                <small class="text-muted">按平台统计成功率和性能</small>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>平台</th>
+                                <th>总请求数</th>
+                                <th>成功请求</th>
+                                <th>成功率</th>
+                                <th>平均响应时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in analysis.platform_analysis %}
+                            <tr>
+                                <td><strong>{{ item.platform }}</strong></td>
+                                <td>{{ item.total_requests|default(0) }}</td>
+                                <td>{{ item.success_requests|default(0) }}</td>
+                                <td>
+                                    <span class="{% if item.success_rate >= 95 %}status-success{% elif item.success_rate >= 80 %}status-slow{% else %}status-error{% endif %}">
+                                        {{ item.success_rate|default(0) }}%
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="{% if item.avg_response_time < 1 %}status-success{% elif item.avg_response_time < 3 %}status-slow{% else %}status-error{% endif %}">
+                                        {{ "%.3f"|format(item.avg_response_time|default(0)) }}s
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="/platform/{{ item.platform }}" class="btn btn-sm btn-outline-primary">
+                                        详细分析
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 入口来源分析 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-external-link-alt"></i> 入口来源分析</h5>
+                <small class="text-muted">不同来源的性能表现</small>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>入口来源</th>
+                                <th>总请求数</th>
+                                <th>平均响应时间</th>
+                                <th>慢请求数</th>
+                                <th>慢请求率</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in analysis.entry_source_analysis %}
+                            <tr>
+                                <td><strong>{{ item.entry_source }}</strong></td>
+                                <td>{{ item.total_requests|default(0) }}</td>
+                                <td>
+                                    <span class="{% if item.avg_response_time < 1 %}status-success{% elif item.avg_response_time < 3 %}status-slow{% else %}status-error{% endif %}">
+                                        {{ "%.3f"|format(item.avg_response_time|default(0)) }}s
+                                    </span>
+                                </td>
+                                <td>{{ item.slow_requests|default(0) }}</td>
+                                <td>
+                                    <span class="{% if item.slow_rate < 5 %}status-success{% elif item.slow_rate < 15 %}status-slow{% else %}status-error{% endif %}">
+                                        {{ item.slow_rate|default(0) }}%
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- API分类分析 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-code"></i> API分类分析</h5>
+                <small class="text-muted">不同API类型的错误率和异常情况</small>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>API分类</th>
+                                <th>总请求数</th>
+                                <th>错误请求</th>
+                                <th>错误率</th>
+                                <th>异常请求</th>
+                                <th>异常率</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in analysis.api_category_analysis %}
+                            <tr>
+                                <td><strong>{{ item.api_category }}</strong></td>
+                                <td>{{ item.total_requests|default(0) }}</td>
+                                <td>{{ item.error_requests|default(0) }}</td>
+                                <td>
+                                    <span class="{% if item.error_rate < 1 %}status-success{% elif item.error_rate < 5 %}status-slow{% else %}status-error{% endif %}">
+                                        {{ item.error_rate|default(0) }}%
+                                    </span>
+                                </td>
+                                <td>{{ item.anomaly_requests|default(0) }}</td>
+                                <td>
+                                    <span class="{% if item.anomaly_rate < 1 %}status-success{% elif item.anomaly_rate < 5 %}status-slow{% else %}status-error{% endif %}">
+                                        {{ item.anomaly_rate|default(0) }}%
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 洞察和建议 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-lightbulb"></i> 分析洞察</h5>
+            </div>
+            <div class="card-body">
+                <div id="insights">
+                    <div class="alert alert-info">
+                        <h6>通过多维度分析，你可以发现以下问题：</h6>
+                        <ul>
+                            <li><strong>平台问题：</strong>哪个平台成功率低或响应慢</li>
+                            <li><strong>来源问题：</strong>特定入口来源是否存在性能问题</li>
+                            <li><strong>API问题：</strong>哪类API错误率高需要优化</li>
+                            <li><strong>异常检测：</strong>发现异常请求模式</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 自动生成洞察建议
+function generateInsights() {
+    const platformData = {{ analysis.platform_analysis|tojson }};
+    const entrySourceData = {{ analysis.entry_source_analysis|tojson }};
+    const apiCategoryData = {{ analysis.api_category_analysis|tojson }};
+    
+    let insights = [];
+    
+    // 分析平台性能问题
+    platformData.forEach(platform => {
+        if (platform.success_rate < 95) {
+            insights.push({
+                type: 'warning',
+                title: `${platform.platform} 平台成功率偏低`,
+                message: `成功率仅为 ${platform.success_rate}%，建议重点关注`
+            });
+        }
+        
+        if (platform.avg_response_time > 3) {
+            insights.push({
+                type: 'danger',
+                title: `${platform.platform} 平台响应时间异常`,
+                message: `平均响应时间 ${platform.avg_response_time.toFixed(3)}s，超过3秒阈值`
+            });
+        }
+    });
+    
+    // 分析入口来源问题
+    entrySourceData.forEach(source => {
+        if (source.slow_rate > 10) {
+            insights.push({
+                type: 'warning',
+                title: `${source.entry_source} 来源慢请求率高`,
+                message: `慢请求率 ${source.slow_rate}%，建议检查网络或缓存策略`
+            });
+        }
+    });
+    
+    // 分析API问题
+    apiCategoryData.forEach(api => {
+        if (api.error_rate > 5) {
+            insights.push({
+                type: 'danger',
+                title: `${api.api_category} API错误率过高`,
+                message: `错误率 ${api.error_rate}%，需要紧急修复`
+            });
+        }
+    });
+    
+    // 显示洞察
+    const insightsContainer = document.getElementById('insights');
+    if (insights.length > 0) {
+        let html = '<h6>系统检测到以下问题:</h6>';
+        insights.forEach(insight => {
+            html += `
+                <div class="alert alert-${insight.type} alert-dismissible fade show" role="alert">
+                    <strong>${insight.title}</strong><br>
+                    ${insight.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        });
+        insightsContainer.innerHTML = html;
+    }
+}
+
+// 页面加载完成后生成洞察
+document.addEventListener('DOMContentLoaded', generateInsights);
+</script>
+{% endblock %}
