@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}请求头分析 - Nginx日志分析平台{% endblock %}
+
+{% block content %}
+<!-- 时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+<style>
+    .metric-card { 
+        border-radius: 10px; 
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        transition: transform 0.2s;
+    }
+    .metric-card:hover { transform: translateY(-2px); }
+    .table-responsive { max-height: 500px; overflow-y: auto; }
+    .platform-card { border-left: 4px solid #007bff; }
+    .browser-card { border-left: 4px solid #28a745; }
+    .os-card { border-left: 4px solid #ffc107; }
+    .device-card { border-left: 4px solid #dc3545; }
+    .security-card { border-left: 4px solid #6f42c1; }
+</style>
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/business">业务分析</a></li>
+                        <li class="breadcrumb-item active">10.请求头分析</li>
+                    </ol>
+                </nav>
+                <h2><i class="fas fa-code text-info me-2"></i>请求头分析</h2>
+                <p class="text-muted">Self功能对标 - 用户行为分析，设备分布统计，安全风险识别</p>
+            </div>
+        </div>
+
+        <!-- User-Agent统计概览 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card platform-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-desktop fa-2x text-primary mb-2"></i>
+                        <div class="h3">{{ user_agent_stats.total_platforms }}</div>
+                        <div class="small">平台类型</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card browser-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-globe fa-2x text-success mb-2"></i>
+                        <div class="h3">{{ user_agent_stats.total_browsers }}</div>
+                        <div class="small">浏览器种类</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card os-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-cogs fa-2x text-warning mb-2"></i>
+                        <div class="h3">{{ user_agent_stats.total_os }}</div>
+                        <div class="small">操作系统</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card device-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-mobile-alt fa-2x text-danger mb-2"></i>
+                        <div class="h3">{{ user_agent_stats.total_devices }}</div>
+                        <div class="small">设备类型</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User-Agent详细分析 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-user-secret text-primary me-2"></i>User-Agent详细分析
+                        </h5>
+                        <small class="text-muted">按请求量排序</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>User-Agent</th>
+                                        <th>分类</th>
+                                        <th>浏览器</th>
+                                        <th>操作系统</th>
+                                        <th>设备类型</th>
+                                        <th>请求数量</th>
+                                        <th>占比</th>
+                                        <th>独立IP</th>
+                                        <th>性能评级</th>
+                                        <th>风险等级</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ua in user_agent_analysis %}
+                                    <tr>
+                                        <td><span class="badge bg-info">{{ loop.index }}</span></td>
+                                        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;" title="{{ ua.user_agent }}">{{ ua.user_agent[:80] }}{% if ua.user_agent|length > 80 %}...{% endif %}</td>
+                                        <td><span class="badge {{ 'bg-success' if ua.category == 'Normal' else 'bg-warning' if ua.category == 'Bot' else 'bg-danger' }}">{{ ua.category }}</span></td>
+                                        <td>{{ ua.browser }}</td>
+                                        <td>{{ ua.os }}</td>
+                                        <td>{{ ua.device_type }}</td>
+                                        <td><strong class="text-primary">{{ "{:,}".format(ua.request_count) }}</strong></td>
+                                        <td>{{ "{:.1f}".format(ua.percentage) }}%</td>
+                                        <td>{{ ua.unique_ips }}</td>
+                                        <td>
+                                            <span class="badge {{ 'bg-success' if ua.performance_grade == 'A' else 'bg-info' if ua.performance_grade == 'B' else 'bg-warning' if ua.performance_grade == 'C' else 'bg-danger' }}">
+                                                {{ ua.performance_grade }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge {{ 'bg-secondary' if ua.risk_level == 'Low' else 'bg-warning' if ua.risk_level == 'Medium' else 'bg-danger' }}">
+                                                {{ ua.risk_level }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Referer来源分析 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-link text-success me-2"></i>Referer来源分析
+                        </h5>
+                        <small class="text-muted">流量来源质量评估</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>来源域名</th>
+                                        <th>来源类型</th>
+                                        <th>请求数量</th>
+                                        <th>占比</th>
+                                        <th>独立IP</th>
+                                        <th>转化效果</th>
+                                        <th>流量质量</th>
+                                        <th>建议</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ref in referer_analysis %}
+                                    <tr>
+                                        <td><span class="badge bg-success">{{ loop.index }}</span></td>
+                                        <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis;" title="{{ ref.referer_domain }}">{{ ref.referer_domain }}</td>
+                                        <td><span class="badge {{ 'bg-primary' if ref.source_type == 'Direct' else 'bg-info' if ref.source_type == 'Search Engine' else 'bg-warning' if ref.source_type == 'Social Media' else 'bg-secondary' }}">{{ ref.source_type }}</span></td>
+                                        <td><strong class="text-success">{{ "{:,}".format(ref.request_count) }}</strong></td>
+                                        <td>{{ "{:.1f}".format(ref.percentage) }}%</td>
+                                        <td>{{ ref.unique_ips }}</td>
+                                        <td>{{ "{:.1f}".format(ref.conversion_rate) }}%</td>
+                                        <td>
+                                            <span class="badge {{ 'bg-success' if ref.traffic_quality == 'High' else 'bg-info' if ref.traffic_quality == 'Medium' else 'bg-warning' }}">
+                                                {{ ref.traffic_quality }}
+                                            </span>
+                                        </td>
+                                        <td><small>{{ ref.recommendation }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 安全风险洞察 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card security-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-shield-alt text-danger me-2"></i>请求头安全洞察
+                        </h5>
+                        <small class="text-muted">异常模式识别与安全评估</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-warning"><i class="fas fa-exclamation-triangle me-2"></i>风险指标</h6>
+                                <ul class="list-unstyled">
+                                    <li><strong>可疑Bot比例:</strong> <span class="text-danger">{{ "{:.1f}".format(security_insights.suspicious_bot_ratio) }}%</span></li>
+                                    <li><strong>异常User-Agent:</strong> <span class="text-warning">{{ security_insights.abnormal_ua_count }}</span></li>
+                                    <li><strong>缺失Referer率:</strong> <span class="text-info">{{ "{:.1f}".format(security_insights.missing_referer_ratio) }}%</span></li>
+                                    <li><strong>高风险请求:</strong> <span class="text-danger">{{ security_insights.high_risk_requests }}</span></li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-info"><i class="fas fa-chart-pie me-2"></i>安全建议</h6>
+                                <ul class="list-unstyled">
+                                    {% for suggestion in security_insights.security_suggestions %}
+                                    <li>• {{ suggestion }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <a href="/business" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>返回业务分析
+                    </a>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>刷新数据
+                        </button>
+                        <button class="btn btn-info" onclick="exportData()">
+                            <i class="fas fa-download me-2"></i>导出Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+{% endblock %}
+
+{% block scripts %}
+    
+    <script>
+    function refreshData() {
+        location.reload();
+    }
+    
+    function exportData() {
+        const userAgentData = {{ user_agent_analysis|tojson|safe }};
+        const refererData = {{ referer_analysis|tojson|safe }};
+        
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        // User-Agent数据
+        csvContent += "=== User-Agent分析 ===\\n";
+        csvContent += "排名,User-Agent,分类,浏览器,操作系统,设备类型,请求数量,占比,独立IP,性能评级,风险等级\\n";
+        userAgentData.forEach((ua, index) => {
+            csvContent += `${index + 1},"${ua.user_agent}","${ua.category}","${ua.browser}","${ua.os}","${ua.device_type}",${ua.request_count},${ua.percentage.toFixed(1)},${ua.unique_ips},"${ua.performance_grade}","${ua.risk_level}"\\n`;
+        });
+        
+        csvContent += "\\n=== Referer分析 ===\\n";
+        csvContent += "排名,来源域名,来源类型,请求数量,占比,独立IP,转化效果,流量质量,建议\\n";
+        refererData.forEach((ref, index) => {
+            csvContent += `${index + 1},"${ref.referer_domain}","${ref.source_type}",${ref.request_count},${ref.percentage.toFixed(1)},${ref.unique_ips},${ref.conversion_rate.toFixed(1)},"${ref.traffic_quality}","${ref.recommendation}"\\n`;
+        });
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `请求头分析_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    // 页面加载完成后统计
+    document.addEventListener('DOMContentLoaded', function() {
+        const userAgentCount = {{ user_agent_analysis|length }};
+        const refererCount = {{ referer_analysis|length }};
+        const riskRequests = {{ security_insights.high_risk_requests }};
+        
+        console.log(`请求头分析完成: ${userAgentCount}种User-Agent, ${refererCount}个Referer来源, ${riskRequests}个高风险请求`);
+        
+        // 高亮高风险行
+        document.querySelectorAll('tbody tr').forEach(row => {
+            const riskCell = row.querySelector('td:last-child span.bg-danger');
+            if (riskCell) {
+                row.style.borderLeft = '4px solid #dc3545';
+            }
+        });
+    });
+    
+    // 监听全局时间变化事件
+    window.addEventListener('globalTimeChanged', function(event) {
+        const timeState = event.detail;
+        console.log('Global time changed:', timeState);
+        
+        // 显示时间范围变更通知，避免频繁刷新页面
+        showTimeRangeNotification(timeState.displayText);
+    });
+    
+    // 显示时间范围变更通知
+    function showTimeRangeNotification(displayText) {
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-success alert-dismissible fade show position-fixed';
+        notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 320px;';
+        notification.innerHTML = `
+            <i class="fas fa-clock me-2"></i>时间范围已更新: ${displayText}
+            <small class="d-block">页面数据将在下次刷新时更新</small>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 4000);
+    }
+    </script>
+{% endblock %}

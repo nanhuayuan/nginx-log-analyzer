@@ -14,8 +14,21 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from data_pipeline.clickhouse_processor import ClickHouseProcessor
 from config.settings import WEB_SERVER
+from business_routes import business_bp
 
 app = Flask(__name__)
+
+# 添加自定义Jinja2过滤器
+def number_format(value):
+    """数字格式化过滤器"""
+    if value is None:
+        return '0'
+    return f"{value:,}"
+
+app.jinja_env.filters['number_format'] = number_format
+
+# 注册业务分析蓝图
+app.register_blueprint(business_bp)
 
 # 全局ClickHouse处理器实例
 ck_processor = ClickHouseProcessor()
@@ -23,21 +36,78 @@ ck_processor = ClickHouseProcessor()
 @app.route('/')
 def index():
     """主页 - 数据概览Dashboard"""
-    try:
-        # 获取基础统计
-        stats = ck_processor.get_statistics()
-        
-        return render_template('index.html', 
-                             ods_stats={},  # ClickHouse版本不需要单独的ODS统计
-                             dwd_stats=stats)
-    except Exception as e:
-        return render_template('error.html', error=str(e))
+    # 返回静态模板，数据通过AJAX API获取
+    return render_template('index.html')
 
+# 通用时间参数处理函数
+def parse_time_params():
+    """解析时间参数，返回datetime对象或None"""
+    start_timestamp = request.args.get('start')
+    end_timestamp = request.args.get('end')
+    
+    if start_timestamp and end_timestamp:
+        try:
+            from datetime import datetime, timedelta
+            # 用户时间戳通常是本地时间(Beijing)，需要转换为UTC时间用于数据库查询
+            # 因为ClickHouse数据以UTC字符串形式存储
+            local_start = datetime.fromtimestamp(int(start_timestamp))
+            local_end = datetime.fromtimestamp(int(end_timestamp))
+            
+            # 转换为UTC时间(Beijing时间 - 8小时)
+            utc_start = local_start - timedelta(hours=8)
+            utc_end = local_end - timedelta(hours=8)
+            
+            return utc_start, utc_end
+        except (ValueError, TypeError) as e:
+            print(f"时间戳转换错误: {e}")
+            return None, None
+    return None, None
+
+@app.route('/api/metrics/basic')
+def api_basic_metrics():
+    """API: 基础指标 - 总请求数、成功率等"""
+    try:
+        start_time, end_time = parse_time_params()
+        stats = ck_processor.get_statistics(start_time, end_time)
+        
+        return jsonify({
+            'status': 'success', 
+            'data': {
+                'total_records': stats.get('total_records', 0),
+                'success_rate': stats.get('success_rate', 0),
+                'slow_rate': stats.get('slow_rate', 0),
+                'anomaly_rate': stats.get('anomaly_rate', 0),
+                'avg_response_time': stats.get('avg_response_time', 0)
+            }
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/metrics/distributions')
+def api_distributions():
+    """API: 分布统计 - 平台、来源、API分类分布"""
+    try:
+        start_time, end_time = parse_time_params()
+        stats = ck_processor.get_statistics(start_time, end_time)
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'platform_distribution': stats.get('platform_distribution', {}),
+                'entry_source_distribution': stats.get('entry_source_distribution', {}),
+                'api_category_distribution': stats.get('api_category_distribution', {})
+            }
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+# 保留原有overview接口用于向后兼容
 @app.route('/api/overview')
 def api_overview():
-    """API: 数据概览"""
+    """API: 数据概览 (兼容接口)"""
     try:
-        stats = ck_processor.get_statistics()
+        start_time, end_time = parse_time_params()
+        stats = ck_processor.get_statistics(start_time, end_time)
         
         return jsonify({
             'status': 'success',
@@ -46,10 +116,7 @@ def api_overview():
             }
         })
     except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        })
+        return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/api/dimensions')
 def api_dimensions():
@@ -95,9 +162,9 @@ def api_platform_detail(platform):
         # 响应时间统计
         response_time_stats = ck_processor.client.query(f"""
             SELECT 
-                avg(response_time) as avg,
-                min(response_time) as min,
-                max(response_time) as max
+                avg(total_request_duration) as avg,
+                min(total_request_duration) as min,
+                max(total_request_duration) as max
             FROM dwd_nginx_enriched 
             WHERE platform = '{platform}'
         """).first_row
@@ -147,26 +214,38 @@ def api_search():
         platform = request.args.get('platform', '')
         entry_source = request.args.get('entry_source', '')
         api_category = request.args.get('api_category', '')
-        start_time = request.args.get('start_time', '')
-        end_time = request.args.get('end_time', '')
+        
+        # 支持新的时间参数格式（start/end）和旧的格式（start_time/end_time）
+        start_time = request.args.get('start', request.args.get('start_time', ''))
+        end_time = request.args.get('end', request.args.get('end_time', ''))
         limit = int(request.args.get('limit', 50))
         
         if not ck_processor.client:
             if not ck_processor.connect():
                 raise Exception("无法连接到ClickHouse")
         
-        # 格式化时间参数
+        # 格式化时间参数，支持多种格式
         if start_time:
-            # 确保时间格式正确：从 '2025-08-07T12:12' 转换为 '2025-08-07 12:12:00'
+            # 支持ISO格式：'2025-08-29T16:00:00.000Z' -> '2025-08-29 16:00:00'
             if 'T' in start_time:
                 start_time = start_time.replace('T', ' ')
+                # 移除毫秒和时区信息
+                if '.000Z' in start_time:
+                    start_time = start_time.replace('.000Z', '')
+                elif 'Z' in start_time:
+                    start_time = start_time.replace('Z', '')
             if len(start_time) == 16:  # 格式: YYYY-MM-DD HH:MM
                 start_time += ':00'  # 添加秒数
         
         if end_time:
-            # 确保时间格式正确：从 '2025-08-07T12:12' 转换为 '2025-08-07 12:12:00'
+            # 支持ISO格式：'2025-08-31T15:59:00.000Z' -> '2025-08-31 15:59:00'
             if 'T' in end_time:
                 end_time = end_time.replace('T', ' ')
+                # 移除毫秒和时区信息
+                if '.000Z' in end_time:
+                    end_time = end_time.replace('.000Z', '')
+                elif 'Z' in end_time:
+                    end_time = end_time.replace('Z', '')
             if len(end_time) == 16:  # 格式: YYYY-MM-DD HH:MM
                 end_time += ':00'  # 添加秒数
         
@@ -179,21 +258,21 @@ def api_search():
         if api_category:
             where_conditions.append(f"api_category = '{api_category}'")
         if start_time:
-            where_conditions.append(f"timestamp >= '{start_time}'")
+            where_conditions.append(f"log_time >= '{start_time}'")
         if end_time:
-            where_conditions.append(f"timestamp <= '{end_time}'")
+            where_conditions.append(f"log_time <= '{end_time}'")
         
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
         # 执行查询
         query = f"""
             SELECT 
-                id, timestamp, platform, entry_source, api_category,
-                request_uri, response_status_code, response_time,
+                id, log_time as timestamp, platform, entry_source, api_category,
+                request_uri, response_status_code, total_request_duration as response_time,
                 is_success, is_slow, has_anomaly
             FROM dwd_nginx_enriched 
             WHERE {where_clause}
-            ORDER BY timestamp DESC
+            ORDER BY log_time DESC
             LIMIT {limit}
         """
         

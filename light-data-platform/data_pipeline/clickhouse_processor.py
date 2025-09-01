@@ -81,7 +81,7 @@ class ClickHouseProcessor:
                         # 生成ID
                         record_id = int(f"{int(datetime.now().timestamp())}{idx % 10000}")
                         
-                        # CSV字段映射
+                        # CSV字段映射 - 扩展支持Self功能需要的所有字段
                         field_mapping = {
                             'timestamp': row.get('raw_time', row.get('arrival_time', '')),
                             'client_ip': row.get('client_ip_address', ''),
@@ -98,7 +98,37 @@ class ClickHouseProcessor:
                             'upstream_connect_time': row.get('upstream_connect_time', 0),
                             'upstream_header_time': row.get('upstream_header_time', 0),
                             'application_name': row.get('application_name', ''),
-                            'service_name': row.get('service_name', '')
+                            'service_name': row.get('service_name', ''),
+                            
+                            # 扩展字段：时间维度
+                            'date': row.get('date', ''),
+                            'hour': row.get('hour', 0),
+                            'minute': row.get('minute', 0),
+                            'second': row.get('second', 0),
+                            'date_hour': row.get('date_hour', ''),
+                            'date_hour_minute': row.get('date_hour_minute', ''),
+                            
+                            # 扩展字段：到达时间维度
+                            'arrival_timestamp': row.get('arrival_timestamp', ''),
+                            'arrival_date': row.get('arrival_date', ''),
+                            'arrival_hour': row.get('arrival_hour', 0),
+                            
+                            # 扩展字段：请求详细信息
+                            'query_parameters': row.get('query_parameters', ''),
+                            
+                            # 扩展字段：HTTP生命周期阶段时间
+                            'phase_upstream_connect': row.get('phase_upstream_connect', 0),
+                            'phase_upstream_header': row.get('phase_upstream_header', 0),
+                            'phase_upstream_body': row.get('phase_upstream_body', 0),
+                            'phase_client_transfer': row.get('phase_client_transfer', 0),
+                            
+                            # 扩展字段：高级时间指标
+                            'backend_connect_phase': row.get('backend_connect_phase', 0),
+                            'backend_process_phase': row.get('backend_process_phase', 0),
+                            'backend_transfer_phase': row.get('backend_transfer_phase', 0),
+                            'nginx_transfer_phase': row.get('nginx_transfer_phase', 0),
+                            'backend_total_phase': row.get('backend_total_phase', 0),
+                            'network_phase': row.get('network_phase', 0)
                         }
                         
                         # 处理时间戳 - 保持原始时间不做时区转换
@@ -149,7 +179,7 @@ class ClickHouseProcessor:
                         
                         enriched_dict = self.enricher.enrich_record(record_dict)
                         
-                        # DWD记录
+                        # DWD记录 - 包含扩展字段
                         dwd_record = [
                             record_id + 1000000,  # DWD ID
                             record_id,  # ODS ID
@@ -174,7 +204,25 @@ class ClickHouseProcessor:
                             bool(enriched_dict.get('has_anomaly', False)),
                             self._safe_string(enriched_dict.get('anomaly_type', '')),
                             datetime.now(),
-                            datetime.now()
+                            datetime.now(),
+                            
+                            # 扩展字段 - Self功能需要
+                            self._safe_float(field_mapping['total_request_duration']),
+                            self._safe_float(field_mapping['upstream_response_time']),
+                            self._safe_float(field_mapping['upstream_header_time']),
+                            self._safe_float(field_mapping['upstream_connect_time']),
+                            self._safe_float(field_mapping['total_bytes_sent_kb']),
+                            self._safe_string(field_mapping['request_full_uri'], 1000),
+                            self._safe_string(field_mapping['query_parameters'], 500),
+                            self._safe_string(field_mapping['request_protocol'], 20),
+                            self._safe_string(field_mapping['referer'], 500),
+                            self._safe_string(field_mapping['user_agent'], 500),
+                            timestamp.date() if timestamp else None,  # date
+                            timestamp.hour if timestamp else 0,      # hour
+                            timestamp.minute if timestamp else 0,    # minute
+                            timestamp.second if timestamp else 0,    # second
+                            timestamp.strftime('%Y-%m-%d %H') if timestamp else '',  # date_hour
+                            timestamp.strftime('%Y-%m-%d %H:%M') if timestamp else ''  # date_hour_minute
                         ]
                         dwd_records.append(dwd_record)
                         
@@ -194,7 +242,7 @@ class ClickHouseProcessor:
                                          'service_name', 'source_file', 'created_at'
                                      ])
                 
-                # 批量插入DWD层
+                # 批量插入DWD层 - 包含扩展字段
                 if dwd_records:
                     self.client.insert('dwd_nginx_enriched', dwd_records,
                                      column_names=[
@@ -203,7 +251,13 @@ class ClickHouseProcessor:
                                          'response_time', 'response_size_kb', 'platform', 'platform_version',
                                          'entry_source', 'api_category', 'application_name', 'service_name',
                                          'is_success', 'is_slow', 'data_quality_score', 'has_anomaly',
-                                         'anomaly_type', 'created_at', 'updated_at'
+                                         'anomaly_type', 'created_at', 'updated_at',
+                                         
+                                         # 扩展字段
+                                         'total_request_duration', 'upstream_response_time', 'upstream_header_time',
+                                         'upstream_connect_time', 'total_bytes_sent_kb', 'request_full_uri',
+                                         'query_parameters', 'http_protocol_version', 'referer_url', 'user_agent_string',
+                                         'date', 'hour', 'minute', 'second', 'date_hour', 'date_hour_minute'
                                      ])
                 
                 total_inserted += len(ods_records)
@@ -239,42 +293,63 @@ class ClickHouseProcessor:
         except (ValueError, TypeError):
             return ''
     
-    def get_statistics(self) -> dict:
+    def get_statistics(self, start_time=None, end_time=None) -> dict:
         """获取ClickHouse数据统计"""
-        if not self.client:
-            if not self.connect():
-                raise Exception("无法连接到ClickHouse")
+        # 为了避免并发查询问题，每次统计都创建新的客户端连接
+        import clickhouse_connect
+        try:
+            # 创建独立的客户端连接
+            client = clickhouse_connect.get_client(
+                host=self.host,
+                port=self.port,
+                username=self.username,
+                password=self.password,
+                database=self.database
+            )
+            # 设置会话时区为东8区
+            client.command("SET session_timezone = 'Asia/Shanghai'")
+        except Exception as e:
+            raise Exception(f"创建ClickHouse连接失败: {e}")
         
         try:
-            # 总记录数
-            total_records = self.client.command("SELECT count(*) FROM dwd_nginx_enriched")
+            # 构建时间过滤条件
+            time_filter = ""
+            if start_time and end_time:
+                # 数据以UTC字符串形式存储，需要使用toString转换进行比较
+                time_filter = f"WHERE toString(log_time) >= '{start_time.strftime('%Y-%m-%d %H:%M:%S')}' AND toString(log_time) <= '{end_time.strftime('%Y-%m-%d %H:%M:%S')}'"
             
-            # 时间范围
-            time_range = self.client.query("SELECT min(timestamp), max(timestamp) FROM dwd_nginx_enriched").first_row
+            # 总记录数
+            total_records = client.command(f"SELECT count(*) FROM dwd_nginx_enriched {time_filter}")
+            
+            # 时间范围（V2系统使用log_time字段）
+            time_range = client.query(f"SELECT min(log_time), max(log_time) FROM dwd_nginx_enriched {time_filter}").first_row
             
             # 平台分布
-            platform_dist = self.client.query("SELECT platform, count(*) as cnt FROM dwd_nginx_enriched GROUP BY platform ORDER BY cnt DESC").result_rows
+            platform_dist = client.query(f"SELECT platform, count(*) as cnt FROM dwd_nginx_enriched {time_filter} GROUP BY platform ORDER BY cnt DESC").result_rows
             
             # 入口来源分布
-            entry_source_dist = self.client.query("SELECT entry_source, count(*) as cnt FROM dwd_nginx_enriched GROUP BY entry_source ORDER BY cnt DESC").result_rows
+            entry_source_dist = client.query(f"SELECT entry_source, count(*) as cnt FROM dwd_nginx_enriched {time_filter} GROUP BY entry_source ORDER BY cnt DESC").result_rows
             
             # API分类分布
-            api_category_dist = self.client.query("SELECT api_category, count(*) as cnt FROM dwd_nginx_enriched GROUP BY api_category ORDER BY cnt DESC").result_rows
+            api_category_dist = client.query(f"SELECT api_category, count(*) as cnt FROM dwd_nginx_enriched {time_filter} GROUP BY api_category ORDER BY cnt DESC").result_rows
             
             # 成功率统计
-            success_count = self.client.command("SELECT count(*) FROM dwd_nginx_enriched WHERE is_success = true")
+            success_where = f"{time_filter} AND is_success = true" if time_filter else "WHERE is_success = true"
+            success_count = client.command(f"SELECT count(*) FROM dwd_nginx_enriched {success_where}")
             
             # 慢请求统计
-            slow_count = self.client.command("SELECT count(*) FROM dwd_nginx_enriched WHERE is_slow = true")
+            slow_where = f"{time_filter} AND is_slow = true" if time_filter else "WHERE is_slow = true"
+            slow_count = client.command(f"SELECT count(*) FROM dwd_nginx_enriched {slow_where}")
             
             # 异常记录统计
-            anomaly_count = self.client.command("SELECT count(*) FROM dwd_nginx_enriched WHERE has_anomaly = true")
+            anomaly_where = f"{time_filter} AND has_anomaly = true" if time_filter else "WHERE has_anomaly = true"
+            anomaly_count = client.command(f"SELECT count(*) FROM dwd_nginx_enriched {anomaly_where}")
             
             # 数据质量评分统计
-            avg_quality_result = self.client.query("SELECT avg(data_quality_score) FROM dwd_nginx_enriched").first_row
+            avg_quality_result = client.query(f"SELECT avg(data_quality_score) FROM dwd_nginx_enriched {time_filter}").first_row
             avg_quality = avg_quality_result[0] if avg_quality_result and avg_quality_result[0] else 0
             
-            return {
+            result = {
                 'total_records': total_records,
                 'success_rate': (success_count / total_records * 100) if total_records > 0 else 0,
                 'slow_rate': (slow_count / total_records * 100) if total_records > 0 else 0,
@@ -288,7 +363,17 @@ class ClickHouseProcessor:
                 'entry_source_distribution': dict(entry_source_dist) if entry_source_dist else {},
                 'api_category_distribution': dict(api_category_dist) if api_category_dist else {}
             }
+            
+            # 关闭独立的客户端连接
+            client.close()
+            return result
+            
         except Exception as e:
+            # 确保在异常情况下也关闭连接
+            try:
+                client.close()
+            except:
+                pass
             raise Exception(f"获取统计失败: {e}")
     
     def analyze_dimensions(self) -> dict:
@@ -304,7 +389,7 @@ class ClickHouseProcessor:
                     platform,
                     count(*) as total_requests,
                     sum(case when is_success then 1 else 0 end) as success_requests,
-                    avg(response_time) as avg_response_time
+                    avg(total_request_duration) as avg_response_time
                 FROM dwd_nginx_enriched 
                 GROUP BY platform
                 ORDER BY total_requests DESC
@@ -315,7 +400,7 @@ class ClickHouseProcessor:
                 SELECT 
                     entry_source,
                     count(*) as total_requests,
-                    avg(response_time) as avg_response_time,
+                    avg(total_request_duration) as avg_response_time,
                     sum(case when is_slow then 1 else 0 end) as slow_requests
                 FROM dwd_nginx_enriched 
                 GROUP BY entry_source

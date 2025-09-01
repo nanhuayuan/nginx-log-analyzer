@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+
+{% block title %}请求头性能关联分析 - Nginx日志分析平台{% endblock %}
+
+{% block content %}
+<!-- 时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+<style>
+    .metric-card { 
+        border-radius: 10px; 
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        transition: transform 0.2s;
+    }
+    .metric-card:hover { transform: translateY(-2px); }
+    .table-responsive { max-height: 500px; overflow-y: auto; }
+    .performance-excellent { background-color: #d4edda; }
+    .performance-good { background-color: #d1ecf1; }
+    .performance-warning { background-color: #fff3cd; }
+    .performance-poor { background-color: #f8d7da; }
+    .correlation-strong { border-left: 4px solid #dc3545; }
+    .correlation-moderate { border-left: 4px solid #ffc107; }
+    .correlation-weak { border-left: 4px solid #28a745; }
+</style>
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/business">业务分析</a></li>
+                        <li class="breadcrumb-item active">11.请求头性能关联分析</li>
+                    </ol>
+                </nav>
+                <h2><i class="fas fa-chart-bar text-warning me-2"></i>请求头性能关联分析</h2>
+                <p class="text-muted">Self功能对标 - 请求头与性能指标深度关联，性能瓶颈根因分析</p>
+            </div>
+        </div>
+
+        <!-- 性能关联概览 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card bg-primary text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-users fa-2x mb-2"></i>
+                        <div class="h3">{{ performance_overview.total_platforms }}</div>
+                        <div class="small">分析平台数</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-success text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:.0f}".format(performance_overview.avg_response_ms) }}ms</div>
+                        <div class="small">整体平均响应时间</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-warning text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                        <div class="h3">{{ performance_overview.slow_platforms }}</div>
+                        <div class="small">性能异常平台</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-danger text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-chart-line fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:.1f}".format(performance_overview.performance_variance) }}%</div>
+                        <div class="small">性能差异系数</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 平台性能关联分析 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-desktop text-primary me-2"></i>平台性能关联分析
+                        </h5>
+                        <div>
+                            <span class="badge bg-success me-1">优秀</span>
+                            <span class="badge bg-info me-1">良好</span>
+                            <span class="badge bg-warning me-1">警告</span>
+                            <span class="badge bg-danger">差</span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>平台信息</th>
+                                        <th>浏览器</th>
+                                        <th>操作系统</th>
+                                        <th>设备类型</th>
+                                        <th>请求数量</th>
+                                        <th>平均响应时间</th>
+                                        <th>P95响应时间</th>
+                                        <th>P99响应时间</th>
+                                        <th>慢请求率</th>
+                                        <th>性能评级</th>
+                                        <th>瓶颈类型</th>
+                                        <th>优化建议</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for platform in platform_performance %}
+                                    <tr class="{% if platform.performance_grade == 'A' %}performance-excellent
+                                               {% elif platform.performance_grade == 'B' %}performance-good
+                                               {% elif platform.performance_grade == 'C' %}performance-warning
+                                               {% else %}performance-poor{% endif %}">
+                                        <td><span class="badge bg-info">{{ loop.index }}</span></td>
+                                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;" title="{{ platform.platform_info }}">{{ platform.platform_info[:50] }}{% if platform.platform_info|length > 50 %}...{% endif %}</td>
+                                        <td>{{ platform.browser }}</td>
+                                        <td>{{ platform.os }}</td>
+                                        <td><span class="badge bg-secondary">{{ platform.device_type }}</span></td>
+                                        <td><strong class="text-primary">{{ "{:,}".format(platform.request_count) }}</strong></td>
+                                        <td><span class="text-{{ 'success' if platform.avg_response_ms < 1000 else 'warning' if platform.avg_response_ms < 3000 else 'danger' }}">{{ "{:.0f}".format(platform.avg_response_ms) }}ms</span></td>
+                                        <td>{{ "{:.0f}".format(platform.p95_response_ms) }}ms</td>
+                                        <td>{{ "{:.0f}".format(platform.p99_response_ms) }}ms</td>
+                                        <td><span class="text-{{ 'success' if platform.slow_request_rate < 5 else 'warning' if platform.slow_request_rate < 15 else 'danger' }}">{{ "{:.1f}".format(platform.slow_request_rate) }}%</span></td>
+                                        <td>
+                                            <span class="badge {{ 'bg-success' if platform.performance_grade == 'A' else 'bg-info' if platform.performance_grade == 'B' else 'bg-warning' if platform.performance_grade == 'C' else 'bg-danger' }}">
+                                                {{ platform.performance_grade }}
+                                            </span>
+                                        </td>
+                                        <td><span class="badge bg-warning">{{ platform.bottleneck_type }}</span></td>
+                                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;"><small>{{ platform.optimization_suggestion }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bot/爬虫性能分析 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-robot text-danger me-2"></i>Bot/爬虫性能分析
+                        </h5>
+                        <small class="text-muted">自动化访问行为性能模式</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Bot类型</th>
+                                        <th>识别标识</th>
+                                        <th>请求数量</th>
+                                        <th>平均响应时间</th>
+                                        <th>请求频率</th>
+                                        <th>成功率</th>
+                                        <th>资源消耗</th>
+                                        <th>影响评估</th>
+                                        <th>建议策略</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for bot in bot_performance %}
+                                    <tr>
+                                        <td><span class="badge {{ 'bg-success' if bot.bot_type == 'Search' else 'bg-info' if bot.bot_type == 'Monitor' else 'bg-warning' if bot.bot_type == 'Social' else 'bg-danger' }}">{{ bot.bot_type }}</span></td>
+                                        <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis;" title="{{ bot.bot_identifier }}">{{ bot.bot_identifier }}</td>
+                                        <td><strong class="text-info">{{ "{:,}".format(bot.request_count) }}</strong></td>
+                                        <td>{{ "{:.0f}".format(bot.avg_response_ms) }}ms</td>
+                                        <td>{{ "{:.1f}".format(bot.request_frequency) }}/min</td>
+                                        <td><span class="text-success">{{ "{:.1f}".format(bot.success_rate) }}%</span></td>
+                                        <td>
+                                            <span class="badge {{ 'bg-success' if bot.resource_impact == 'Low' else 'bg-warning' if bot.resource_impact == 'Medium' else 'bg-danger' }}">
+                                                {{ bot.resource_impact }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge {{ 'bg-success' if bot.impact_assessment == 'Positive' else 'bg-warning' if bot.impact_assessment == 'Neutral' else 'bg-danger' }}">
+                                                {{ bot.impact_assessment }}
+                                            </span>
+                                        </td>
+                                        <td><small>{{ bot.strategy_recommendation }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 性能优化建议 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-lightbulb text-warning me-2"></i>基于请求头的性能优化建议
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card bg-light h-100 correlation-strong">
+                                    <div class="card-body">
+                                        <h6 class="text-danger"><i class="fas fa-desktop me-2"></i>客户端优化</h6>
+                                        <ul class="list-unstyled">
+                                            {% for suggestion in optimization_suggestions.client_optimizations %}
+                                            <li>• {{ suggestion }}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light h-100 correlation-moderate">
+                                    <div class="card-body">
+                                        <h6 class="text-warning"><i class="fas fa-server me-2"></i>服务端优化</h6>
+                                        <ul class="list-unstyled">
+                                            {% for suggestion in optimization_suggestions.server_optimizations %}
+                                            <li>• {{ suggestion }}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light h-100 correlation-weak">
+                                    <div class="card-body">
+                                        <h6 class="text-info"><i class="fas fa-cog me-2"></i>架构优化</h6>
+                                        <ul class="list-unstyled">
+                                            {% for suggestion in optimization_suggestions.architecture_optimizations %}
+                                            <li>• {{ suggestion }}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <a href="/business" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>返回业务分析
+                    </a>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>刷新数据
+                        </button>
+                        <button class="btn btn-info" onclick="exportData()">
+                            <i class="fas fa-download me-2"></i>导出Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+{% endblock %}
+
+{% block scripts %}
+    
+    <script>
+    function refreshData() {
+        location.reload();
+    }
+    
+    function exportData() {
+        const platformData = {{ platform_performance|tojson|safe }};
+        const botData = {{ bot_performance|tojson|safe }};
+        
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        // 平台性能数据
+        csvContent += "=== 平台性能关联分析 ===\\n";
+        csvContent += "排名,平台信息,浏览器,操作系统,设备类型,请求数量,平均响应时间,P95响应时间,P99响应时间,慢请求率,性能评级,瓶颈类型,优化建议\\n";
+        platformData.forEach((platform, index) => {
+            csvContent += `${index + 1},"${platform.platform_info}","${platform.browser}","${platform.os}","${platform.device_type}",${platform.request_count},${platform.avg_response_ms.toFixed(0)},${platform.p95_response_ms.toFixed(0)},${platform.p99_response_ms.toFixed(0)},${platform.slow_request_rate.toFixed(1)},"${platform.performance_grade}","${platform.bottleneck_type}","${platform.optimization_suggestion}"\\n`;
+        });
+        
+        csvContent += "\\n=== Bot/爬虫性能分析 ===\\n";
+        csvContent += "Bot类型,识别标识,请求数量,平均响应时间,请求频率,成功率,资源消耗,影响评估,建议策略\\n";
+        botData.forEach(bot => {
+            csvContent += `"${bot.bot_type}","${bot.bot_identifier}",${bot.request_count},${bot.avg_response_ms.toFixed(0)},${bot.request_frequency.toFixed(1)},${bot.success_rate.toFixed(1)},"${bot.resource_impact}","${bot.impact_assessment}","${bot.strategy_recommendation}"\\n`;
+        });
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `请求头性能关联分析_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    // 页面加载完成后统计和可视化
+    document.addEventListener('DOMContentLoaded', function() {
+        const platformCount = {{ platform_performance|length }};
+        const botCount = {{ bot_performance|length }};
+        const slowPlatforms = {{ performance_overview.slow_platforms }};
+        
+        console.log(`性能关联分析完成: ${platformCount}个平台, ${botCount}个Bot, ${slowPlatforms}个异常平台`);
+        
+        // 高亮性能异常行
+        document.querySelectorAll('.performance-poor').forEach(row => {
+            row.style.borderLeft = '4px solid #dc3545';
+            row.style.backgroundColor = '#fff5f5';
+        });
+        
+        document.querySelectorAll('.performance-warning').forEach(row => {
+            row.style.borderLeft = '4px solid #ffc107';
+        });
+        
+        // 添加性能图表可视化提示
+        if (slowPlatforms > 0) {
+            console.warn(`发现 ${slowPlatforms} 个性能异常平台，建议重点关注优化`);
+        }
+    });
+    
+    // 监听全局时间变化事件
+    window.addEventListener('globalTimeChanged', function(event) {
+        const timeState = event.detail;
+        console.log('Global time changed:', timeState);
+        
+        // 显示时间范围变更通知，避免频繁刷新页面
+        showTimeRangeNotification(timeState.displayText);
+    });
+    
+    // 显示时间范围变更通知
+    function showTimeRangeNotification(displayText) {
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-warning alert-dismissible fade show position-fixed';
+        notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 320px;';
+        notification.innerHTML = `
+            <i class="fas fa-clock me-2"></i>时间范围已更新: ${displayText}
+            <small class="d-block">页面数据将在下次刷新时更新</small>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 4000);
+    }
+    </script>
+{% endblock %}

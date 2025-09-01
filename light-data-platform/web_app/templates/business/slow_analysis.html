@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>慢请求分析 - Nginx日志分析平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .metric-card { 
+            border-radius: 10px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            transition: transform 0.2s;
+        }
+        .metric-card:hover { transform: translateY(-2px); }
+        .table-responsive { max-height: 600px; overflow-y: auto; }
+        .api-column { max-width: 400px; overflow: hidden; text-overflow: ellipsis; }
+        .slow-critical { background-color: #ffe6e6; }
+        .slow-warning { background-color: #fff3cd; }
+        .slow-moderate { background-color: #e2f3ff; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-chart-line me-2"></i>Nginx业务分析平台
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">数据概览</a>
+                <a class="nav-link active" href="/business">业务分析</a>
+                <a class="nav-link" href="/analysis">多维分析</a>
+                <a class="nav-link" href="/search">数据查询</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/business">业务分析</a></li>
+                        <li class="breadcrumb-item active">03.慢请求分析</li>
+                    </ol>
+                </nav>
+                <h2><i class="fas fa-clock text-warning me-2"></i>慢请求分析</h2>
+                <p class="text-muted">Self功能对标 - 识别性能瓶颈，分析响应时间异常，优化用户体验</p>
+            </div>
+        </div>
+
+        <!-- 慢请求概览 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card bg-warning text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-hourglass-half fa-2x mb-2"></i>
+                        <div class="h3">{{ overview.slow_requests }}</div>
+                        <div class="small">慢请求总数</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-info text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:.0f}".format(overview.avg_response_ms) }}ms</div>
+                        <div class="small">平均响应时间</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-success text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-check-circle fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:.1f}".format(overview.success_rate) }}%</div>
+                        <div class="small">总体成功率</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-primary text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-mouse-pointer fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:,}".format(overview.total_pv) }}</div>
+                        <div class="small">总请求数</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 慢请求TOP50详情 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list text-danger me-2"></i>慢请求TOP50详情分析
+                        </h5>
+                        <div>
+                            <small class="text-muted me-3">慢请求阈值: >3000ms</small>
+                            <span class="badge bg-danger">严重</span>
+                            <span class="badge bg-warning">警告</span>
+                            <span class="badge bg-info">轻微</span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>接口路径</th>
+                                        <th>平均响应时间</th>
+                                        <th>P95响应时间</th>
+                                        <th>慢请求数</th>
+                                        <th>总请求数</th>
+                                        <th>慢请求率</th>
+                                        <th>成功率</th>
+                                        <th>后端处理时间</th>
+                                        <th>网络传输时间</th>
+                                        <th>问题类型</th>
+                                        <th>主要平台</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for api in slow_apis %}
+                                    <tr class="{% if api.avg_response_ms > 5000 %}slow-critical
+                                               {% elif api.avg_response_ms > 3000 %}slow-warning
+                                               {% else %}slow-moderate{% endif %}">
+                                        <td><span class="badge bg-warning">{{ loop.index }}</span></td>
+                                        <td class="api-column" title="{{ api.api }}">{{ api.api }}</td>
+                                        <td><strong class="text-danger">{{ "{:.0f}".format(api.avg_response_ms) }}ms</strong></td>
+                                        <td><span class="text-warning">{{ "{:.0f}".format(api.p95_ms) }}ms</span></td>
+                                        <td><span class="text-danger">{{ api.slow_count }}</span></td>
+                                        <td>{{ "{:,}".format(api.total_requests) }}</td>
+                                        <td>
+                                            <span class="text-warning">
+                                                {{ "{:.1f}".format((api.slow_count / api.total_requests * 100) if api.total_requests > 0 else 0) }}%
+                                            </span>
+                                        </td>
+                                        <td><span class="text-success">{{ "{:.1f}".format(api.success_rate) }}%</span></td>
+                                        <td>{{ "{:.0f}".format(api.avg_process_ms) }}ms</td>
+                                        <td>{{ "{:.0f}".format(api.avg_transfer_ms) }}ms</td>
+                                        <td><span class="badge bg-info">{{ api.problem_type }}</span></td>
+                                        <td><span class="badge bg-secondary">{{ api.main_platform }}</span></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 性能优化建议 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-lightbulb text-warning me-2"></i>性能优化建议
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card bg-light h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>后端处理优化</h6>
+                                        <ul class="list-unstyled">
+                                            <li>• 数据库查询优化</li>
+                                            <li>• 缓存策略调整</li>
+                                            <li>• 算法逻辑优化</li>
+                                            <li>• 资源池配置</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-warning"><i class="fas fa-network-wired me-2"></i>网络传输优化</h6>
+                                        <ul class="list-unstyled">
+                                            <li>• 启用数据压缩</li>
+                                            <li>• CDN加速配置</li>
+                                            <li>• 带宽扩容</li>
+                                            <li>• 网络路由优化</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-info"><i class="fas fa-server me-2"></i>架构设计优化</h6>
+                                        <ul class="list-unstyled">
+                                            <li>• 负载均衡调整</li>
+                                            <li>• 微服务拆分</li>
+                                            <li>• 异步处理机制</li>
+                                            <li>• 容量规划</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <a href="/business" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>返回业务分析
+                    </a>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>刷新数据
+                        </button>
+                        <button class="btn btn-info" onclick="exportData()">
+                            <i class="fas fa-download me-2"></i>导出Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+    function refreshData() {
+        location.reload();
+    }
+    
+    function exportData() {
+        // 准备导出数据
+        const slowApis = {{ slow_apis|tojson|safe }};
+        const csvContent = "data:text/csv;charset=utf-8," 
+            + "排名,接口路径,平均响应时间(ms),P95响应时间(ms),慢请求数,总请求数,成功率(%),问题类型,主要平台\n"
+            + slowApis.map((api, index) => 
+                `${index + 1},"${api.api}",${api.avg_response_ms.toFixed(0)},${api.p95_ms.toFixed(0)},${api.slow_count},${api.total_requests},${api.success_rate.toFixed(1)},"${api.problem_type}","${api.main_platform}"`
+            ).join('\n');
+            
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `慢请求分析_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    // 页面加载完成后统计
+    document.addEventListener('DOMContentLoaded', function() {
+        const slowApisCount = {{ slow_apis|length }};
+        const totalSlowRequests = {{ overview.slow_requests }};
+        
+        console.log(`慢请求分析完成: 发现${slowApisCount}个慢接口, 总计${totalSlowRequests}个慢请求`);
+        
+        // 高亮严重慢请求
+        document.querySelectorAll('.slow-critical').forEach(row => {
+            row.style.borderLeft = '4px solid #dc3545';
+        });
+    });
+    </script>
+</body>
+</html>

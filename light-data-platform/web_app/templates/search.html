@@ -11,6 +11,9 @@
     </div>
 </div>
 
+<!-- 全局时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+
 <!-- 查询条件表单 -->
 <div class="row mb-4">
     <div class="col-12">
@@ -341,12 +344,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // 监听全局时间变更
     window.addEventListener('globalTimeChanged', function(event) {
         const timeState = event.detail;
-        document.getElementById('start_time').value = timeState.startTime;
-        document.getElementById('end_time').value = timeState.endTime;
         
-        // 自动执行查询（可选）
-        if (timeState.rangeType !== 'custom') {
-            performSearch();
+        // 转换ISO格式时间到search页面需要的格式
+        try {
+            const startTime = new Date(timeState.startTime);
+            const endTime = new Date(timeState.endTime);
+            
+            document.getElementById('start_time').value = formatDateTimeLocal(startTime);
+            document.getElementById('end_time').value = formatDateTimeLocal(endTime);
+            
+            // 自动执行查询
+            if (timeState.rangeType !== 'custom') {
+                performSearch();
+            }
+        } catch (e) {
+            console.error('时间格式转换错误:', e);
         }
     });
 });

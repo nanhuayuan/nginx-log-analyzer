@@ -10,12 +10,25 @@
     </div>
 </div>
 
+<!-- 时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+
+<!-- 加载状态 -->
+<div id="loadingIndicator" class="row mb-4">
+    <div class="col-12 text-center">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">加载中...</span>
+        </div>
+        <p class="mt-2 text-muted">正在加载数据概览...</p>
+    </div>
+</div>
+
 <!-- 核心指标卡片 -->
-<div class="row mb-4">
+<div id="dashboardContent" class="row mb-4" style="display: none;">
     <div class="col-md-3">
         <div class="card bg-primary text-white">
             <div class="card-body card-metric">
-                <div class="metric-value">{{ dwd_stats.total_records|default(0) }}</div>
+                <div class="metric-value" id="totalRecords">0</div>
                 <div class="metric-label">总请求数</div>
             </div>
         </div>
@@ -23,7 +36,7 @@
     <div class="col-md-3">
         <div class="card bg-success text-white">
             <div class="card-body card-metric">
-                <div class="metric-value">{{ "%.1f"|format(dwd_stats.success_rate|default(0)) }}%</div>
+                <div class="metric-value" id="successRate">0%</div>
                 <div class="metric-label">成功率</div>
             </div>
         </div>
@@ -31,7 +44,7 @@
     <div class="col-md-3">
         <div class="card bg-warning text-white">
             <div class="card-body card-metric">
-                <div class="metric-value">{{ "%.1f"|format(dwd_stats.slow_rate|default(0)) }}%</div>
+                <div class="metric-value" id="slowRate">0%</div>
                 <div class="metric-label">慢请求率</div>
             </div>
         </div>
@@ -39,7 +52,7 @@
     <div class="col-md-3">
         <div class="card bg-danger text-white">
             <div class="card-body card-metric">
-                <div class="metric-value">{{ "%.1f"|format(dwd_stats.anomaly_rate|default(0)) }}%</div>
+                <div class="metric-value" id="anomalyRate">0%</div>
                 <div class="metric-label">异常率</div>
             </div>
         </div>
@@ -92,12 +105,17 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-3">
-                        <a href="/analysis" class="btn btn-primary btn-lg w-100">
+                        <a href="/business" class="btn btn-primary btn-lg w-100">
+                            <i class="fas fa-chart-line"></i><br>业务分析
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="/analysis" class="btn btn-info btn-lg w-100">
                             <i class="fas fa-chart-bar"></i><br>多维度分析
                         </a>
                     </div>
                     <div class="col-md-3">
-                        <a href="/search" class="btn btn-info btn-lg w-100">
+                        <a href="/search" class="btn btn-warning btn-lg w-100">
                             <i class="fas fa-search"></i><br>数据查询
                         </a>
                     </div>
@@ -105,11 +123,6 @@
                         <button class="btn btn-success btn-lg w-100" onclick="refreshData()">
                             <i class="fas fa-sync-alt"></i><br>刷新数据
                         </button>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="/help" class="btn btn-secondary btn-lg w-100">
-                            <i class="fas fa-question-circle"></i><br>使用帮助
-                        </a>
                     </div>
                 </div>
             </div>
@@ -119,7 +132,100 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// 页面加载完成后获取数据
+document.addEventListener('DOMContentLoaded', function() {
+    initializeCharts();
+    loadDashboardData();
+    
+    // 监听全局时间变化事件
+    window.addEventListener('globalTimeChanged', function(event) {
+        const timeState = event.detail;
+        loadDashboardData(timeState.startTime, timeState.endTime);
+    });
+});
+
+// 加载仪表板数据
+function loadDashboardData(startTime = null, endTime = null) {
+    showLoading();
+    
+    // 构建时间参数
+    const timeParams = (startTime && endTime) ? 
+        `?start=${startTime}&end=${endTime}` : '';
+    
+    // 并行加载基础指标和分布数据
+    Promise.all([
+        fetch(`/api/metrics/basic${timeParams}`).then(r => r.json()),
+        fetch(`/api/metrics/distributions${timeParams}`).then(r => r.json())
+    ])
+    .then(([basicData, distributionData]) => {
+        if (basicData.status === 'success' && distributionData.status === 'success') {
+            // 合并数据
+            const combinedStats = {
+                ...basicData.data,
+                ...distributionData.data
+            };
+            updateDashboard(combinedStats);
+            hideLoading();
+        } else {
+            const error = basicData.message || distributionData.message || '数据加载失败';
+            showError('数据加载失败: ' + error);
+        }
+    })
+    .catch(error => {
+        console.error('API调用失败:', error);
+        showError('网络错误，请检查服务器连接');
+    });
+}
+
+// 更新仪表板显示
+function updateDashboard(stats) {
+    document.getElementById('totalRecords').textContent = formatNumber(stats.total_records || 0);
+    document.getElementById('successRate').textContent = (stats.success_rate || 0).toFixed(1) + '%';
+    document.getElementById('slowRate').textContent = (stats.slow_rate || 0).toFixed(1) + '%';
+    document.getElementById('anomalyRate').textContent = (stats.anomaly_rate || 0).toFixed(1) + '%';
+    
+    // 更新图表
+    updateCharts(stats);
+}
+
+// 显示加载状态
+function showLoading() {
+    document.getElementById('loadingIndicator').style.display = 'block';
+    document.getElementById('dashboardContent').style.display = 'none';
+}
+
+// 隐藏加载状态
+function hideLoading() {
+    document.getElementById('loadingIndicator').style.display = 'none';
+    document.getElementById('dashboardContent').style.display = 'block';
+}
+
+// 显示错误信息
+function showError(message) {
+    document.getElementById('loadingIndicator').innerHTML = `
+        <div class="col-12 text-center">
+            <div class="alert alert-danger" role="alert">
+                <i class="fas fa-exclamation-triangle"></i> ${message}
+            </div>
+            <button class="btn btn-primary" onclick="loadDashboardData()">
+                <i class="fas fa-redo"></i> 重新加载
+            </button>
+        </div>
+    `;
+}
+
+// 格式化数字
+function formatNumber(num) {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+}
+
 // 图表配置
 const chartOptions = {
     responsive: true,
@@ -130,84 +236,91 @@ const chartOptions = {
     }
 };
 
-// 平台分布饼图
-const platformData = {
-    labels: [
-        {% for platform, count in dwd_stats.platform_distribution.items() %}
-        '{{ platform }}',
-        {% endfor %}
-    ],
-    datasets: [{
-        data: [
-            {% for platform, count in dwd_stats.platform_distribution.items() %}
-            {{ count }},
-            {% endfor %}
-        ],
-        backgroundColor: [
-            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
-        ]
-    }]
-};
+// 图表实例存储
+let platformChart, entrySourceChart, apiCategoryChart;
 
-new Chart(document.getElementById('platformChart'), {
-    type: 'doughnut',
-    data: platformData,
-    options: chartOptions
-});
+// 初始化图表（使用空数据）
+function initializeCharts() {
+    // 平台分布饼图
+    const platformCtx = document.getElementById('platformChart');
+    if (platformCtx) {
+        platformChart = new Chart(platformCtx, {
+            type: 'doughnut',
+            data: {
+                labels: [],
+                datasets: [{
+                    data: [],
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
+                }]
+            },
+            options: chartOptions
+        });
+    }
 
-// 入口来源饼图
-const entrySourceData = {
-    labels: [
-        {% for source, count in dwd_stats.entry_source_distribution.items() %}
-        '{{ source }}',
-        {% endfor %}
-    ],
-    datasets: [{
-        data: [
-            {% for source, count in dwd_stats.entry_source_distribution.items() %}
-            {{ count }},
-            {% endfor %}
-        ],
-        backgroundColor: [
-            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'
-        ]
-    }]
-};
+    // 入口来源饼图
+    const entrySourceCtx = document.getElementById('entrySourceChart');
+    if (entrySourceCtx) {
+        entrySourceChart = new Chart(entrySourceCtx, {
+            type: 'doughnut', 
+            data: {
+                labels: [],
+                datasets: [{
+                    data: [],
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0']
+                }]
+            },
+            options: chartOptions
+        });
+    }
 
-new Chart(document.getElementById('entrySourceChart'), {
-    type: 'doughnut',
-    data: entrySourceData,
-    options: chartOptions
-});
+    // API分类饼图
+    const apiCategoryCtx = document.getElementById('apiCategoryChart');
+    if (apiCategoryCtx) {
+        apiCategoryChart = new Chart(apiCategoryCtx, {
+            type: 'doughnut',
+            data: {
+                labels: [],
+                datasets: [{
+                    data: [],
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF']
+                }]
+            },
+            options: chartOptions
+        });
+    }
+}
 
-// API分类饼图
-const apiCategoryData = {
-    labels: [
-        {% for category, count in dwd_stats.api_category_distribution.items() %}
-        '{{ category }}',
-        {% endfor %}
-    ],
-    datasets: [{
-        data: [
-            {% for category, count in dwd_stats.api_category_distribution.items() %}
-            {{ count }},
-            {% endfor %}
-        ],
-        backgroundColor: [
-            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'
-        ]
-    }]
-};
+// 更新图表数据
+function updateCharts(stats) {
+    // 更新平台分布图表
+    if (platformChart && stats.platform_distribution) {
+        const platformLabels = Object.keys(stats.platform_distribution);
+        const platformData = Object.values(stats.platform_distribution);
+        
+        platformChart.data.labels = platformLabels;
+        platformChart.data.datasets[0].data = platformData;
+        platformChart.update();
+    }
 
-new Chart(document.getElementById('apiCategoryChart'), {
-    type: 'doughnut',
-    data: apiCategoryData,
-    options: chartOptions
-});
+    // 更新入口来源图表  
+    if (entrySourceChart && stats.entry_source_distribution) {
+        const sourceLabels = Object.keys(stats.entry_source_distribution);
+        const sourceData = Object.values(stats.entry_source_distribution);
+        
+        entrySourceChart.data.labels = sourceLabels;
+        entrySourceChart.data.datasets[0].data = sourceData;
+        entrySourceChart.update();
+    }
 
-// 刷新数据函数
-function refreshData() {
-    location.reload();
+    // 更新API分类图表
+    if (apiCategoryChart && stats.api_category_distribution) {
+        const categoryLabels = Object.keys(stats.api_category_distribution);
+        const categoryData = Object.values(stats.api_category_distribution);
+        
+        apiCategoryChart.data.labels = categoryLabels;
+        apiCategoryChart.data.datasets[0].data = categoryData;
+        apiCategoryChart.update();
+    }
 }
 </script>
 {% endblock %}

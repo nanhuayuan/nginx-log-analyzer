@@ -11,6 +11,9 @@
     </div>
 </div>
 
+<!-- 时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+
 <!-- 平台维度分析 -->
 <div class="row mb-4">
     <div class="col-12">
@@ -184,6 +187,18 @@
 
 {% block scripts %}
 <script>
+// 监听全局时间变化事件
+window.addEventListener('globalTimeChanged', function(event) {
+    const timeState = event.detail;
+    console.log('Analysis page time changed:', timeState);
+    
+    // 重新加载页面并传递时间参数
+    const url = new URL(window.location);
+    url.searchParams.set('start', timeState.startTime);
+    url.searchParams.set('end', timeState.endTime);
+    window.location.href = url.toString();
+});
+
 // 自动生成洞察建议
 function generateInsights() {
     const platformData = {{ analysis.platform_analysis|tojson }};

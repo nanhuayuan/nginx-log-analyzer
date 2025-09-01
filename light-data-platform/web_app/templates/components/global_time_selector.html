@@ -1,0 +1,312 @@
+<!-- 全局时间选择器组件 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-clock"></i> 时间范围选择</h5>
+            </div>
+            <div class="card-body">
+                <div class="time-selector-container">
+                    <!-- 快捷时间选择按钮 -->
+                    <div class="time-quick-buttons mb-3">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-range="1h">最近1小时</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-range="6h">最近6小时</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-range="24h">最近24小时</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-range="7d">最近7天</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-range="dataRange">数据范围(4月23日)</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 自定义时间范围 -->
+                    <div class="custom-time-range">
+                        <div class="row align-items-end">
+                            <div class="col-md-2">
+                                <label class="form-label">开始日期</label>
+                                <input type="date" class="form-control form-control-sm" id="globalStartDate" value="2025-04-23">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">开始时间</label>
+                                <input type="time" class="form-control form-control-sm" id="globalStartTime" value="00:00" step="60">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">结束日期</label>
+                                <input type="date" class="form-control form-control-sm" id="globalEndDate" value="2025-04-23">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">结束时间</label>
+                                <input type="time" class="form-control form-control-sm" id="globalEndTime" value="23:59" step="60">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-primary btn-sm" id="applyTimeRange">
+                                    <i class="fas fa-check"></i> 应用
+                                </button>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="time-display">
+                                    <small class="text-muted">当前范围:</small>
+                                    <div id="currentTimeDisplay" class="fw-bold text-primary">数据范围(4月23日)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 时间选择器组件脚本
+(function() {
+    // 全局时间状态 (使用Unix时间戳)
+    window.globalTimeState = {
+        startTime: Math.floor(new Date('2025-04-23T00:00:00').getTime() / 1000),
+        endTime: Math.floor(new Date('2025-04-23T23:59:00').getTime() / 1000),
+        displayText: '数据范围(4月23日)',
+        rangeType: 'dataRange'
+    };
+    
+    // 快捷时间选择
+    document.querySelectorAll('.time-quick-buttons button').forEach(button => {
+        button.addEventListener('click', function() {
+            const range = this.dataset.range;
+            setQuickTimeRange(range);
+            
+            // 更新按钮状态
+            document.querySelectorAll('.time-quick-buttons button').forEach(btn => {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-outline-primary');
+            });
+            this.classList.remove('btn-outline-primary');
+            this.classList.add('btn-primary');
+        });
+    });
+    
+    // 应用自定义时间范围
+    document.getElementById('applyTimeRange').addEventListener('click', function() {
+        applyCustomTimeRange();
+    });
+    
+    function setQuickTimeRange(range) {
+        const now = new Date();
+        let startTime, endTime, displayText;
+        
+        switch(range) {
+            case '1h':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 60 * 60 * 1000);
+                displayText = '最近1小时';
+                break;
+            case '6h':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+                displayText = '最近6小时';
+                break;
+            case '24h':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                displayText = '最近24小时';
+                break;
+            case '7d':
+                endTime = new Date(now);
+                startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                displayText = '最近7天';
+                break;
+            case 'dataRange':
+                startTime = new Date(2025, 3, 23, 0, 0, 0); // 月份从0开始
+                endTime = new Date(2025, 3, 23, 23, 59, 0);
+                displayText = '数据范围(4月23日)';
+                break;
+            default:
+                return;
+        }
+        
+        // 更新全局状态
+        window.globalTimeState = {
+            startTime: Math.floor(startTime.getTime() / 1000), // 转换为Unix时间戳
+            endTime: Math.floor(endTime.getTime() / 1000), // 转换为Unix时间戳
+            displayText: displayText,
+            rangeType: range
+        };
+        
+        // 更新输入框
+        updateTimeInputs(startTime, endTime);
+        
+        // 更新显示
+        updateTimeDisplay();
+        
+        // 触发全局时间变更事件
+        triggerGlobalTimeChange();
+        
+        // 更新URL参数
+        updateURLParams(window.globalTimeState);
+    }
+    
+    function applyCustomTimeRange() {
+        const startDate = document.getElementById('globalStartDate').value;
+        const startTime = document.getElementById('globalStartTime').value;
+        const endDate = document.getElementById('globalEndDate').value;
+        const endTime = document.getElementById('globalEndTime').value;
+        
+        if (!startDate || !endDate) {
+            alert('请选择开始日期和结束日期！');
+            return;
+        }
+        
+        const start = new Date(`${startDate}T${startTime || '00:00'}`);
+        const end = new Date(`${endDate}T${endTime || '23:59'}`);
+        
+        if (start >= end) {
+            alert('开始时间必须早于结束时间！');
+            return;
+        }
+        
+        // 更新全局状态
+        window.globalTimeState = {
+            startTime: Math.floor(start.getTime() / 1000), // 转换为Unix时间戳
+            endTime: Math.floor(end.getTime() / 1000), // 转换为Unix时间戳
+            displayText: '自定义时间范围',
+            rangeType: 'custom'
+        };
+        
+        // 更新显示
+        updateTimeDisplay();
+        
+        // 重置按钮状态
+        document.querySelectorAll('.time-quick-buttons button').forEach(btn => {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-outline-primary');
+        });
+        
+        // 触发全局时间变更事件
+        triggerGlobalTimeChange();
+        
+        // 更新URL参数
+        updateURLParams(window.globalTimeState);
+    }
+    
+    function updateTimeInputs(startTime, endTime) {
+        document.getElementById('globalStartDate').value = formatDateForInput(startTime);
+        document.getElementById('globalStartTime').value = formatTimeForInput(startTime);
+        document.getElementById('globalEndDate').value = formatDateForInput(endTime);
+        document.getElementById('globalEndTime').value = formatTimeForInput(endTime);
+    }
+    
+    function updateTimeDisplay() {
+        document.getElementById('currentTimeDisplay').textContent = window.globalTimeState.displayText;
+    }
+    
+    function formatDateForInput(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    
+    function formatTimeForInput(date) {
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}`;
+    }
+    
+    function triggerGlobalTimeChange() {
+        const event = new CustomEvent('globalTimeChanged', {
+            detail: window.globalTimeState
+        });
+        window.dispatchEvent(event);
+    }
+    
+    function updateURLParams(timeState) {
+        const url = new URL(window.location);
+        url.searchParams.set('start', timeState.startTime);
+        url.searchParams.set('end', timeState.endTime);
+        
+        // 更新URL但不刷新页面
+        window.history.replaceState({}, '', url);
+        
+        // 如果是业务分析页面，自动刷新数据
+        if (window.location.pathname.startsWith('/business')) {
+            setTimeout(() => {
+                window.location.href = url.toString();
+            }, 500);
+        }
+    }
+    
+    // 页面加载时从URL参数初始化时间状态
+    function initializeFromURL() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const startParam = urlParams.get('start');
+        const endParam = urlParams.get('end');
+        
+        if (startParam && endParam) {
+            try {
+                const startTime = new Date(startParam);
+                const endTime = new Date(endParam);
+                
+                window.globalTimeState = {
+                    startTime: startTime.toISOString(),
+                    endTime: endTime.toISOString(),
+                    displayText: '自定义时间范围',
+                    rangeType: 'custom'
+                };
+                
+                updateTimeInputs(startTime, endTime);
+                updateTimeDisplay();
+            } catch (e) {
+                console.error('Invalid time parameters in URL');
+            }
+        }
+    }
+    
+    // 页面加载完成时初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeFromURL();
+        
+        // 默认选中数据范围按钮
+        const dataRangeBtn = document.querySelector('button[data-range="dataRange"]');
+        if (dataRangeBtn) {
+            dataRangeBtn.classList.remove('btn-outline-primary');
+            dataRangeBtn.classList.add('btn-primary');
+        }
+    });
+})();
+</script>
+
+<style>
+.time-selector-container {
+    max-width: 100%;
+}
+
+.time-quick-buttons {
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 15px;
+}
+
+.custom-time-range .row {
+    gap: 10px;
+}
+
+.time-display {
+    text-align: center;
+}
+
+#currentTimeDisplay {
+    font-size: 0.9em;
+    padding: 5px 10px;
+    background: rgba(13, 110, 253, 0.1);
+    border-radius: 4px;
+    border: 1px solid rgba(13, 110, 253, 0.2);
+}
+
+@media (max-width: 768px) {
+    .time-quick-buttons .btn-group {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .time-quick-buttons .btn {
+        margin-bottom: 5px;
+    }
+}
+</style>

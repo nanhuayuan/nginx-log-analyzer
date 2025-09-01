@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>状态码统计 - Nginx日志分析平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .metric-card { 
+            border-radius: 10px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            transition: transform 0.2s;
+        }
+        .metric-card:hover { transform: translateY(-2px); }
+        .table-responsive { max-height: 500px; overflow-y: auto; }
+        .status-success { background-color: #d4edda; }
+        .status-error { background-color: #f8d7da; }
+        .status-client-error { background-color: #fff3cd; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-chart-line me-2"></i>Nginx业务分析平台
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">数据概览</a>
+                <a class="nav-link active" href="/business">业务分析</a>
+                <a class="nav-link" href="/analysis">多维分析</a>
+                <a class="nav-link" href="/search">数据查询</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/business">业务分析</a></li>
+                        <li class="breadcrumb-item active">04.状态码统计</li>
+                    </ol>
+                </nav>
+                <h2><i class="fas fa-code text-success me-2"></i>状态码统计分析</h2>
+                <p class="text-muted">Self功能对标 - HTTP状态码分布分析，错误模式识别，系统健康度监控</p>
+            </div>
+        </div>
+
+        <!-- 状态码分布概览 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-pie text-primary me-2"></i>HTTP状态码分布
+                        </h5>
+                        <small class="text-muted">按请求数量排序</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>状态码</th>
+                                        <th>状态类型</th>
+                                        <th>请求数量</th>
+                                        <th>占比</th>
+                                        <th>平均响应时间</th>
+                                        <th>独立客户端</th>
+                                        <th>严重程度</th>
+                                        <th>分布图</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for status in status_dist %}
+                                    <tr class="{% if status.status_type == 'Success' %}status-success
+                                               {% elif status.status_type == 'Server Error' %}status-error
+                                               {% elif status.status_type == 'Client Error' %}status-client-error
+                                               {% endif %}">
+                                        <td><span class="badge {{ 'bg-success' if status.status_type == 'Success' else 'bg-danger' if status.status_type == 'Server Error' else 'bg-warning' }} fs-6">{{ status.status_code }}</span></td>
+                                        <td><strong>{{ status.status_type }}</strong></td>
+                                        <td><strong class="text-primary">{{ "{:,}".format(status.request_count) }}</strong></td>
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <div class="progress flex-grow-1 me-2" style="width: 100px; height: 20px;">
+                                                    <div class="progress-bar {{ 'bg-success' if status.status_type == 'Success' else 'bg-danger' if status.status_type == 'Server Error' else 'bg-warning' }}" 
+                                                         style="width: {{ status.percentage }}%"></div>
+                                                </div>
+                                                <strong>{{ "{:.1f}".format(status.percentage) }}%</strong>
+                                            </div>
+                                        </td>
+                                        <td>{{ "{:.0f}".format(status.avg_response_ms) }}ms</td>
+                                        <td>{{ status.unique_clients }}</td>
+                                        <td>
+                                            <span class="badge {{ 'bg-danger' if status.severity == 'Critical' else 'bg-warning' if status.severity == 'High' else 'bg-info' if status.severity == 'Medium' else 'bg-secondary' }}">
+                                                {{ status.severity }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="progress" style="width: 80px; height: 8px;">
+                                                <div class="progress-bar {{ 'bg-success' if status.status_type == 'Success' else 'bg-danger' if status.status_type == 'Server Error' else 'bg-warning' }}" 
+                                                     style="width: {{ status.percentage if status.percentage <= 100 else 100 }}%"></div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 错误趋势分析 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-line text-warning me-2"></i>24小时错误趋势分析
+                        </h5>
+                        <small class="text-muted">按小时统计错误分布</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>时段</th>
+                                        <th>总请求数</th>
+                                        <th>客户端错误(4xx)</th>
+                                        <th>服务器错误(5xx)</th>
+                                        <th>总错误数</th>
+                                        <th>错误率</th>
+                                        <th>健康水平</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for trend in error_trend %}
+                                    <tr>
+                                        <td><strong>{{ trend.hour }}:00</strong></td>
+                                        <td>{{ "{:,}".format(trend.total_requests) }}</td>
+                                        <td><span class="text-warning">{{ trend.client_errors }}</span></td>
+                                        <td><span class="text-danger">{{ trend.server_errors }}</span></td>
+                                        <td><strong class="text-danger">{{ trend.total_errors }}</strong></td>
+                                        <td>
+                                            <span class="{% if trend.error_rate > 10 %}text-danger
+                                                         {% elif trend.error_rate > 5 %}text-warning
+                                                         {% else %}text-success{% endif %}">
+                                                {{ "{:.1f}".format(trend.error_rate) }}%
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge {{ 'bg-success' if trend.health_level == 'Excellent' else 'bg-info' if trend.health_level == 'Good' else 'bg-warning' if trend.health_level == 'Warning' else 'bg-danger' }}">
+                                                {{ trend.health_level }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 关键错误详情 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>关键错误监控
+                        </h5>
+                        <small class="text-muted">高频错误接口识别 (500/502/503/504/404)</small>
+                    </div>
+                    <div class="card-body">
+                        {% if critical_errors %}
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>状态码</th>
+                                            <th>接口路径</th>
+                                            <th>错误次数</th>
+                                            <th>影响用户</th>
+                                            <th>最后发生时间</th>
+                                            <th>主要平台</th>
+                                            <th>优先级</th>
+                                            <th>影响程度</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for error in critical_errors %}
+                                        <tr class="{{ 'table-danger' if error.priority in ['P0', 'P1'] else 'table-warning' }}">
+                                            <td><span class="badge bg-danger fs-6">{{ error.status_code }}</span></td>
+                                            <td class="api-column" title="{{ error.api }}">{{ error.api }}</td>
+                                            <td><strong class="text-danger">{{ error.error_count }}</strong></td>
+                                            <td>{{ error.affected_users }}</td>
+                                            <td>{{ error.last_occurrence.strftime('%H:%M:%S') if error.last_occurrence else 'N/A' }}</td>
+                                            <td><span class="badge bg-secondary">{{ error.main_platform }}</span></td>
+                                            <td>
+                                                <span class="badge {{ 'bg-danger' if error.priority == 'P0' else 'bg-warning' if error.priority == 'P1' else 'bg-info' if error.priority == 'P2' else 'bg-secondary' }}">
+                                                    {{ error.priority }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge {{ 'bg-danger' if error.impact_level == 'High' else 'bg-warning' if error.impact_level == 'Medium' else 'bg-secondary' }}">
+                                                    {{ error.impact_level }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+                                <h4 class="text-success">系统状态良好</h4>
+                                <p class="text-muted">当前没有检测到关键错误</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <a href="/business" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>返回业务分析
+                    </a>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>刷新数据
+                        </button>
+                        <button class="btn btn-info" onclick="exportData()">
+                            <i class="fas fa-download me-2"></i>导出Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+    function refreshData() {
+        location.reload();
+    }
+    
+    function exportData() {
+        alert('Excel导出功能开发中，敬请期待！');
+    }
+    
+    // 页面加载完成后统计
+    document.addEventListener('DOMContentLoaded', function() {
+        const statusCount = {{ status_dist|length }};
+        const errorTrendCount = {{ error_trend|length }};
+        const criticalErrorsCount = {{ critical_errors|length if critical_errors else 0 }};
+        
+        console.log(`状态码分析完成: ${statusCount}种状态码, ${errorTrendCount}小时趋势, ${criticalErrorsCount}个关键错误`);
+        
+        // 计算整体健康度
+        const totalRequests = {{ status_dist|sum(attribute='request_count') if status_dist else 0 }};
+        const successRequests = {% for status in status_dist %}{% if status.status_type == 'Success' %}{{ status.request_count }}{% endif %}{% endfor %};
+        const overallHealthRate = totalRequests > 0 ? (successRequests / totalRequests * 100).toFixed(1) : 0;
+        
+        console.log(`系统整体健康度: ${overallHealthRate}%`);
+    });
+    </script>
+</body>
+</html>

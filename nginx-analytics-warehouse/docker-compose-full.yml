@@ -1,0 +1,98 @@
+services:
+  # ClickHouse 数据库
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: nginx-analytics-clickhouse-full
+    restart: unless-stopped
+    ports:
+      - "8123:8123"    # HTTP接口
+      - "9000:9000"    # Native接口
+    volumes:
+      - ./volumes/clickhouse/data:/var/lib/clickhouse
+      - ./volumes/clickhouse/logs:/var/log/clickhouse-server
+    environment:
+      CLICKHOUSE_DB: nginx_analytics
+      CLICKHOUSE_USER: analytics_user
+      CLICKHOUSE_PASSWORD: analytics_password
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8123/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana 数据可视化
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: nginx-analytics-grafana-full
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./volumes/grafana:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_INSTALL_PLUGINS: vertamedia-clickhouse-datasource
+      GF_SERVER_ROOT_URL: http://localhost:3000/
+    depends_on:
+      - clickhouse
+
+  # Redis for Superset
+  redis:
+    image: redis:7-alpine
+    container_name: nginx-analytics-redis-full
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./volumes/redis:/data
+
+  # PostgreSQL for Superset metadata
+  postgres:
+    image: postgres:13
+    container_name: nginx-analytics-postgres-full
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: superset
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset_password
+    # 暂时移除数据卷映射避免权限问题
+    # volumes:
+    #   - ./volumes/postgres:/var/lib/postgresql/data
+
+  # Apache Superset
+  superset:
+    image: apache/superset:latest
+    container_name: nginx-analytics-superset-full
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      - SUPERSET_SECRET_KEY=your_secret_key_here_change_in_production
+      - DATABASE_HOST=postgres
+      - DATABASE_DB=superset
+      - DATABASE_USER=superset
+      - DATABASE_PASSWORD=superset_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./volumes/superset:/app/superset_home
+    depends_on:
+      - postgres
+      - redis
+      - clickhouse
+    command: >
+      bash -c "
+        pip install clickhouse-connect &&
+        superset db upgrade &&
+        (superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.com --password admin123 || echo 'Admin user might already exist') &&
+        superset init &&
+        superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger
+      "
+
+networks:
+  default:
+    name: nginx-analytics-full
+    driver: bridge

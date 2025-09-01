@@ -1,0 +1,51 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Nginx 日志分析",
+    "tags": ["nginx", "analytics"],
+    "timezone": "Asia/Shanghai",
+    "panels": [
+      {
+        "id": 1,
+        "title": "请求总量",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "SELECT count() FROM ods_nginx_raw",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "状态码分布",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "SELECT response_status_code, count() as cnt FROM ods_nginx_raw GROUP BY response_status_code",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "时间线请求量",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "SELECT toStartOfHour(log_time) as time, count() as cnt FROM ods_nginx_raw WHERE log_time >= now() - INTERVAL 24 HOUR GROUP BY time ORDER BY time",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      }
+    ],
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "refresh": "5m"
+  }
+}

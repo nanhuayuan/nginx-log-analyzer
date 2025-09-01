@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block title %}综合报告 - Nginx日志分析平台{% endblock %}
+
+{% block content %}
+<!-- 时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+<style>
+    .metric-card { 
+        border-radius: 10px; 
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        transition: transform 0.2s;
+    }
+    .metric-card:hover { transform: translateY(-2px); }
+    .table-responsive { max-height: 500px; overflow-y: auto; }
+    .summary-section { margin-bottom: 2rem; padding: 1.5rem; border-left: 4px solid #007bff; background: #f8f9fa; }
+    .insight-card { border-radius: 8px; margin-bottom: 15px; }
+    .recommendation { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .kpi-excellent { color: #28a745; font-weight: bold; }
+    .kpi-good { color: #17a2b8; font-weight: bold; }
+    .kpi-warning { color: #ffc107; font-weight: bold; }
+    .kpi-danger { color: #dc3545; font-weight: bold; }
+</style>
+
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/business">业务分析</a></li>
+                        <li class="breadcrumb-item active">12.综合报告</li>
+                    </ol>
+                </nav>
+                <h2><i class="fas fa-chart-line text-primary me-2"></i>综合报告</h2>
+                <p class="text-muted">Self功能对标 - 全面业务洞察，关键指标汇总，决策支持分析</p>
+            </div>
+        </div>
+
+        <!-- 报告概览 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card bg-primary text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-chart-pie fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:,}".format(report_overview.total_requests or 0) }}</div>
+                        <div class="small">总请求数</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-success text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:.0f}".format(report_overview.avg_response_ms or 0) }}ms</div>
+                        <div class="small">平均响应时间</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-info text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-percentage fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:.2f}".format(report_overview.success_rate or 0) }}%</div>
+                        <div class="small">成功率</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-warning text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-users fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:,}".format(report_overview.unique_users or 0) }}</div>
+                        <div class="small">独立用户</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 关键洞察 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="summary-section">
+                    <h4><i class="fas fa-lightbulb text-warning me-2"></i>关键业务洞察</h4>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-primary"><i class="fas fa-chart-line me-2"></i>核心发现</h6>
+                            <ul class="list-unstyled">
+                                {% for insight in key_insights.core_findings %}
+                                <li class="mb-2">
+                                    <i class="fas fa-check-circle text-success me-2"></i>
+                                    {{ insight }}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-warning"><i class="fas fa-exclamation-triangle me-2"></i>关键问题</h6>
+                            <ul class="list-unstyled">
+                                {% for issue in key_insights.critical_issues %}
+                                <li class="mb-2">
+                                    <i class="fas fa-times-circle text-danger me-2"></i>
+                                    {{ issue }}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 多维度分析汇总 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-cube text-info me-2"></i>多维度分析汇总
+                        </h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>分析维度</th>
+                                        <th>关键指标</th>
+                                        <th>当前值</th>
+                                        <th>基准值</th>
+                                        <th>健康度</th>
+                                        <th>趋势</th>
+                                        <th>优先级</th>
+                                        <th>建议措施</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for dimension in analysis_dimensions %}
+                                    <tr>
+                                        <td><strong>{{ dimension.dimension_name }}</strong></td>
+                                        <td>{{ dimension.key_metric }}</td>
+                                        <td class="{{ 'kpi-excellent' if dimension.health_status == 'Excellent' else 'kpi-good' if dimension.health_status == 'Good' else 'kpi-warning' if dimension.health_status == 'Warning' else 'kpi-danger' }}">
+                                            {{ dimension.current_value }}
+                                        </td>
+                                        <td>{{ dimension.baseline_value }}</td>
+                                        <td>
+                                            <span class="badge {{ 'bg-success' if dimension.health_status == 'Excellent' else 'bg-info' if dimension.health_status == 'Good' else 'bg-warning' if dimension.health_status == 'Warning' else 'bg-danger' }}">
+                                                {{ dimension.health_status or 'Unknown' }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <i class="fas fa-arrow-{{ 'up text-success' if dimension.trend == 'Up' else 'down text-danger' if dimension.trend == 'Down' else 'right text-muted' }}"></i>
+                                        </td>
+                                        <td>
+                                            <span class="badge {{ 'bg-danger' if dimension.priority == 'High' else 'bg-warning' if dimension.priority == 'Medium' else 'bg-secondary' }}">
+                                                {{ dimension.priority or 'Low' }}
+                                            </span>
+                                        </td>
+                                        <td><small>{{ dimension.recommendation or '持续监控' }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOP关键指标 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-trophy text-warning me-2"></i>TOP性能接口
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% for api in top_performing_apis %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <strong>{{ api.api_name }}</strong>
+                                <br>
+                                <small class="text-muted">{{ api.requests }}次请求</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="text-success">{{ "{:.0f}".format(api.avg_response_ms) }}ms</span>
+                                <br>
+                                <small class="text-success">{{ "{:.1f}".format(api.success_rate) }}%</small>
+                            </div>
+                        </div>
+                        {% if not loop.last %}<hr>{% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>需要关注的接口
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% for api in concerning_apis %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <strong>{{ api.api_name }}</strong>
+                                <br>
+                                <small class="text-muted">{{ api.issue_type }}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="text-danger">{{ "{:.0f}".format(api.avg_response_ms) }}ms</span>
+                                <br>
+                                <small class="text-danger">{{ "{:.1f}".format(api.success_rate) }}%</small>
+                            </div>
+                        </div>
+                        {% if not loop.last %}<hr>{% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 业务健康度评估 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-heartbeat text-success me-2"></i>业务健康度评估
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <div class="display-4 mb-2">
+                                        <span class="{{ 'text-success' if health_assessment.overall_score >= 90 else 'text-info' if health_assessment.overall_score >= 80 else 'text-warning' if health_assessment.overall_score >= 70 else 'text-danger' }}">
+                                            {{ "{:.0f}".format(health_assessment.overall_score or 0) }}
+                                        </span>
+                                    </div>
+                                    <h6>综合健康度</h6>
+                                </div>
+                            </div>
+                            <div class="col-md-9">
+                                <div class="row">
+                                    {% for metric in health_assessment.detailed_metrics %}
+                                    <div class="col-md-4 mb-3">
+                                        <div class="card insight-card bg-light">
+                                            <div class="card-body text-center p-3">
+                                                <h6 class="card-title">{{ metric.metric_name }}</h6>
+                                                <div class="h4 {{ 'text-success' if metric.score >= 90 else 'text-info' if metric.score >= 80 else 'text-warning' if metric.score >= 70 else 'text-danger' }}">
+                                                    {{ "{:.0f}".format(metric.score) }}
+                                                </div>
+                                                <div class="progress mt-2" style="height: 6px;">
+                                                    <div class="progress-bar {{ 'bg-success' if metric.score >= 90 else 'bg-info' if metric.score >= 80 else 'bg-warning' if metric.score >= 70 else 'bg-danger' }}" 
+                                                         style="width: {{ metric.score }}%"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 执行建议 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card recommendation text-white">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-rocket me-2"></i>执行建议与行动计划
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-fire me-2"></i>紧急处理 (24小时内)</h6>
+                                <ul class="list-unstyled">
+                                    {% for action in action_plan.urgent_actions %}
+                                    <li class="mb-2">
+                                        <i class="fas fa-arrow-right me-2"></i>{{ action }}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-calendar-alt me-2"></i>短期优化 (1-2周)</h6>
+                                <ul class="list-unstyled">
+                                    {% for action in action_plan.short_term_actions %}
+                                    <li class="mb-2">
+                                        <i class="fas fa-arrow-right me-2"></i>{{ action }}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-chart-line me-2"></i>长期规划 (1个月+)</h6>
+                                <ul class="list-unstyled">
+                                    {% for action in action_plan.long_term_actions %}
+                                    <li class="mb-2">
+                                        <i class="fas fa-arrow-right me-2"></i>{{ action }}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据摘要 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-table text-secondary me-2"></i>数据摘要
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-info-circle text-info me-2"></i>报告信息</h6>
+                                <ul class="list-unstyled">
+                                    <li><strong>分析时间段:</strong> {{ data_summary.analysis_period }}</li>
+                                    <li><strong>数据来源:</strong> {{ data_summary.data_source }}</li>
+                                    <li><strong>处理记录数:</strong> {{ "{:,}".format(data_summary.total_records or 0) }}</li>
+                                    <li><strong>报告生成时间:</strong> {{ data_summary.report_time.strftime('%Y-%m-%d %H:%M:%S') if data_summary.report_time else 'N/A' }}</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-cog text-secondary me-2"></i>分析配置</h6>
+                                <ul class="list-unstyled">
+                                    <li><strong>慢请求阈值:</strong> {{ data_summary.slow_threshold }}ms</li>
+                                    <li><strong>成功状态码:</strong> {{ data_summary.success_codes|join(', ') }}</li>
+                                    <li><strong>分析维度数:</strong> {{ data_summary.dimensions_count }}</li>
+                                    <li><strong>监控指标数:</strong> {{ data_summary.metrics_count }}</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <a href="/business" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>返回业务分析
+                    </a>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>刷新数据
+                        </button>
+                        <button class="btn btn-success me-2" onclick="exportPDF()">
+                            <i class="fas fa-file-pdf me-2"></i>导出PDF
+                        </button>
+                        <button class="btn btn-info" onclick="exportExcel()">
+                            <i class="fas fa-file-excel me-2"></i>导出Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+    function refreshData() {
+        showNotification('数据刷新功能开发中，请手动刷新页面查看最新数据', 'info');
+    }
+    
+    function exportPDF() {
+        showNotification('PDF导出功能开发中，敬请期待！', 'info');
+    }
+    
+    function exportExcel() {
+        const dimensions = {{ analysis_dimensions|tojson|safe }};
+        const csvContent = "data:text/csv;charset=utf-8," 
+            + "分析维度,关键指标,当前值,基准值,健康度,趋势,优先级,建议措施\\n"
+            + dimensions.map(dim => 
+                `"${dim.dimension_name}","${dim.key_metric}","${dim.current_value}","${dim.baseline_value}","${dim.health_status || 'Unknown'}","${dim.trend || 'Stable'}","${dim.priority || 'Low'}","${dim.recommendation || '持续监控'}"`
+            ).join('\\n');
+            
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `综合报告_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+        notification.innerHTML = `
+            <i class="fas fa-info-circle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 4000);
+    }
+    
+    // 监听全局时间变化事件
+    window.addEventListener('globalTimeChanged', function(event) {
+        const timeState = event.detail;
+        console.log('Global time changed:', timeState);
+        showNotification(`时间范围已更新: ${timeState.displayText}`, 'primary');
+    });
+    
+    // 页面加载完成后统计
+    document.addEventListener('DOMContentLoaded', function() {
+        const totalRequests = {{ report_overview.total_requests or 0 }};
+        const overallScore = {{ health_assessment.overall_score or 0 }};
+        
+        console.log(`综合报告生成完成: ${totalRequests.toLocaleString()}条记录，健康度${overallScore.toFixed(0)}分`);
+        
+        // 高亮关键指标
+        document.querySelectorAll('.kpi-danger').forEach(element => {
+            element.style.fontWeight = 'bold';
+            element.parentNode.style.backgroundColor = '#fff5f5';
+        });
+    });
+    </script>
+{% endblock %}

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>接口健康度详情 - Nginx日志分析平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .metric-card { 
+            border-radius: 10px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            transition: transform 0.2s;
+        }
+        .metric-card:hover { transform: translateY(-2px); }
+        .table-responsive { max-height: 500px; overflow-y: auto; }
+        .api-column { max-width: 400px; overflow: hidden; text-overflow: ellipsis; }
+        .health-excellent { color: #28a745; }
+        .health-good { color: #20c997; }
+        .health-warning { color: #ffc107; }
+        .health-critical { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-chart-line me-2"></i>Nginx业务分析平台
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">数据概览</a>
+                <a class="nav-link active" href="/business">业务分析</a>
+                <a class="nav-link" href="/analysis">多维分析</a>
+                <a class="nav-link" href="/search">数据查询</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/business">业务分析</a></li>
+                        <li class="breadcrumb-item active">01.接口性能分析</li>
+                    </ol>
+                </nav>
+                <h2><i class="fas fa-heartbeat text-danger me-2"></i>接口健康度详情分析</h2>
+                <p class="text-muted">Self功能对标 - 接口性能深度分析，包含响应时间、成功率、错误分布等核心指标</p>
+            </div>
+        </div>
+
+        <!-- 热门接口TOP20 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-fire text-danger me-2"></i>热门接口TOP20分析
+                        </h5>
+                        <small class="text-muted">按访问量排序 - 业务核心接口识别</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>接口路径</th>
+                                        <th>请求数</th>
+                                        <th>平均响应时间</th>
+                                        <th>P95响应时间</th>
+                                        <th>成功率</th>
+                                        <th>错误率</th>
+                                        <th>主要平台</th>
+                                        <th>API分类</th>
+                                        <th>健康状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for api in hot_apis %}
+                                    <tr>
+                                        <td><span class="badge bg-primary">{{ loop.index }}</span></td>
+                                        <td class="api-column" title="{{ api.api }}">{{ api.api }}</td>
+                                        <td><strong class="text-primary">{{ "{:,}".format(api.total_requests) }}</strong></td>
+                                        <td>{{ "{:.0f}".format(api.avg_response_ms) }}ms</td>
+                                        <td>{{ "{:.0f}".format(api.p95_ms) }}ms</td>
+                                        <td><span class="text-success">{{ "{:.1f}".format(api.success_rate) }}%</span></td>
+                                        <td><span class="text-danger">{{ "{:.1f}".format(api.error_rate) }}%</span></td>
+                                        <td>{{ api.main_platform }}</td>
+                                        <td><span class="badge bg-secondary">{{ api.api_category }}</span></td>
+                                        <td>
+                                            <span class="badge 
+                                                {% if api.health_status == 'Healthy' %}bg-success
+                                                {% elif api.health_status == 'Warning' %}bg-warning
+                                                {% else %}bg-danger{% endif %}">
+                                                {{ api.health_status }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 慢接口TOP20 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-exclamation-triangle text-warning me-2"></i>慢接口TOP20分析
+                        </h5>
+                        <small class="text-muted">按响应时间排序 - 性能瓶颈识别</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>接口路径</th>
+                                        <th>平均响应时间</th>
+                                        <th>P95响应时间</th>
+                                        <th>慢请求数</th>
+                                        <th>总请求数</th>
+                                        <th>成功率</th>
+                                        <th>后端处理时间</th>
+                                        <th>传输时间</th>
+                                        <th>问题类型</th>
+                                        <th>主要平台</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for api in slow_apis %}
+                                    <tr>
+                                        <td><span class="badge bg-warning">{{ loop.index }}</span></td>
+                                        <td class="api-column" title="{{ api.api }}">{{ api.api }}</td>
+                                        <td><strong class="text-danger">{{ "{:.0f}".format(api.avg_response_ms) }}ms</strong></td>
+                                        <td><span class="text-warning">{{ "{:.0f}".format(api.p95_ms) }}ms</span></td>
+                                        <td><span class="text-danger">{{ api.slow_count }}</span></td>
+                                        <td>{{ "{:,}".format(api.total_requests) }}</td>
+                                        <td><span class="text-success">{{ "{:.1f}".format(api.success_rate) }}%</span></td>
+                                        <td>{{ "{:.0f}".format(api.avg_process_ms) }}ms</td>
+                                        <td>{{ "{:.0f}".format(api.avg_transfer_ms) }}ms</td>
+                                        <td><span class="badge bg-info">{{ api.problem_type }}</span></td>
+                                        <td>{{ api.main_platform }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 错误告警详情 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-exclamation-circle text-danger me-2"></i>错误告警详情
+                        </h5>
+                        <small class="text-muted">高错误率接口监控</small>
+                    </div>
+                    <div class="card-body">
+                        {% if error_alerts %}
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>接口路径</th>
+                                            <th>错误率</th>
+                                            <th>错误数/总请求数</th>
+                                            <th>主要错误状态码</th>
+                                            <th>主要平台</th>
+                                            <th>告警级别</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for alert in error_alerts %}
+                                        <tr class="{{ 'table-danger' if alert.alert_level == 'HIGH' else 'table-warning' }}">
+                                            <td class="api-column" title="{{ alert.api }}">{{ alert.api }}</td>
+                                            <td><strong class="text-danger">{{ "{:.1f}".format(alert.error_rate) }}%</strong></td>
+                                            <td>{{ alert.error_count }}/{{ "{:,}".format(alert.total_requests) }}</td>
+                                            <td><span class="badge bg-dark">{{ alert.main_error_code }}</span></td>
+                                            <td>{{ alert.main_platform }}</td>
+                                            <td>
+                                                <span class="badge {{ 'bg-danger' if alert.alert_level == 'HIGH' else 'bg-warning' }}">
+                                                    {{ alert.alert_level }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+                                <h4 class="text-success">系统运行良好</h4>
+                                <p class="text-muted">当前没有检测到高错误率的接口</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <a href="/business" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>返回业务分析
+                    </a>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>刷新数据
+                        </button>
+                        <button class="btn btn-info" onclick="exportData()">
+                            <i class="fas fa-download me-2"></i>导出Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+    function refreshData() {
+        location.reload();
+    }
+    
+    function exportData() {
+        alert('Excel导出功能开发中，敬请期待！');
+    }
+    
+    // 页面加载完成后的统计
+    document.addEventListener('DOMContentLoaded', function() {
+        const hotApisCount = {{ hot_apis|length }};
+        const slowApisCount = {{ slow_apis|length }};
+        const errorAlertsCount = {{ error_alerts|length if error_alerts else 0 }};
+        
+        console.log(`接口健康度分析完成: 热门接口${hotApisCount}个, 慢接口${slowApisCount}个, 错误告警${errorAlertsCount}个`);
+    });
+    </script>
+</body>
+</html>

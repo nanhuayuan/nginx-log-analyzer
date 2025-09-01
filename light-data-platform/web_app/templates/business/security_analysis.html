@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}安全分析 - Nginx日志分析平台{% endblock %}
+
+{% block content %}
+<!-- 时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+<style>
+    .metric-card { 
+        border-radius: 10px; 
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        transition: transform 0.2s;
+    }
+    .metric-card:hover { transform: translateY(-2px); }
+    .table-responsive { max-height: 500px; overflow-y: auto; }
+    .risk-critical { background-color: #f5c6cb; border-left: 4px solid #dc3545; }
+    .risk-high { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+    .risk-medium { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+    .risk-low { background-color: #d4edda; border-left: 4px solid #28a745; }
+    .attack-pattern { font-family: 'Courier New', monospace; font-size: 0.85em; }
+</style>
+
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/business">业务分析</a></li>
+                        <li class="breadcrumb-item active">07.安全分析</li>
+                    </ol>
+                </nav>
+                <h2><i class="fas fa-shield-alt text-danger me-2"></i>安全分析</h2>
+                <p class="text-muted">Self功能对标 - 威胁检测，攻击识别，安全风险评估</p>
+            </div>
+        </div>
+
+        <!-- 安全总览 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card bg-danger text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                        <div class="h3">{{ security_overview.high_risk_events or 0 }}</div>
+                        <div class="small">高危事件</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-warning text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-bug fa-2x mb-2"></i>
+                        <div class="h3">{{ security_overview.attack_attempts or 0 }}</div>
+                        <div class="small">攻击尝试</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-info text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-ban fa-2x mb-2"></i>
+                        <div class="h3">{{ security_overview.blocked_requests or 0 }}</div>
+                        <div class="small">拦截请求</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-success text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-percentage fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:.1f}".format(security_overview.security_score or 0) }}</div>
+                        <div class="small">安全评分</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 威胁检测 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-search text-danger me-2"></i>威胁检测结果
+                        </h5>
+                        <small class="text-muted">按风险等级排序</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>检测时间</th>
+                                        <th>威胁类型</th>
+                                        <th>源IP</th>
+                                        <th>攻击路径</th>
+                                        <th>风险等级</th>
+                                        <th>状态码</th>
+                                        <th>User-Agent</th>
+                                        <th>处理建议</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for threat in security_threats %}
+                                    <tr class="risk-{{ threat.risk_level.lower() if threat.risk_level else 'low' }}">
+                                        <td>{{ threat.timestamp.strftime('%H:%M:%S') if threat.timestamp else 'N/A' }}</td>
+                                        <td>
+                                            <span class="badge bg-warning">{{ threat.threat_type or 'Unknown' }}</span>
+                                        </td>
+                                        <td><code>{{ threat.source_ip }}</code></td>
+                                        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;" title="{{ threat.attack_path }}">
+                                            <span class="attack-pattern">{{ threat.attack_path }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge {{ 'bg-danger' if threat.risk_level == 'Critical' else 'bg-danger' if threat.risk_level == 'High' else 'bg-warning' if threat.risk_level == 'Medium' else 'bg-success' }}">
+                                                {{ threat.risk_level or 'Low' }}
+                                            </span>
+                                        </td>
+                                        <td>{{ threat.status_code }}</td>
+                                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;" title="{{ threat.user_agent }}">
+                                            <small>{{ threat.user_agent or 'N/A' }}</small>
+                                        </td>
+                                        <td><small>{{ threat.recommendation or '持续监控' }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 攻击类型分析 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-pie text-warning me-2"></i>攻击类型分析
+                        </h5>
+                        <small class="text-muted">常见攻击模式统计</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% for attack_type in attack_patterns %}
+                            <div class="col-md-4 mb-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="mb-1">{{ attack_type.attack_name or 'Unknown Attack' }}</h6>
+                                                <small class="text-muted">{{ attack_type.description or 'N/A' }}</small>
+                                            </div>
+                                            <div class="text-end">
+                                                <div class="h5 text-danger mb-0">{{ "{:,}".format(attack_type.count or 0) }}</div>
+                                                <small class="text-warning">{{ "{:.1f}".format(attack_type.percentage or 0) }}%</small>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <div class="progress" style="height: 6px;">
+                                                <div class="progress-bar bg-danger" style="width: {{ attack_type.percentage or 0 }}%"></div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <small class="text-muted">
+                                                <i class="fas fa-clock me-1"></i>最近: {{ attack_type.last_seen.strftime('%H:%M') if attack_type.last_seen else 'N/A' }}
+                                                <i class="fas fa-shield-alt ms-2 me-1"></i>{{ attack_type.severity or 'Medium' }}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SQL注入检测 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-database text-danger me-2"></i>SQL注入检测
+                        </h5>
+                        <small class="text-muted">SQL注入攻击模式识别</small>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if sql_injections %}
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover mb-0">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>时间</th>
+                                            <th>源IP</th>
+                                            <th>注入类型</th>
+                                            <th>payload</th>
+                                            <th>目标参数</th>
+                                            <th>状态码</th>
+                                            <th>风险评级</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for injection in sql_injections %}
+                                        <tr class="risk-{{ injection.risk_level.lower() if injection.risk_level else 'medium' }}">
+                                            <td>{{ injection.timestamp.strftime('%H:%M:%S') if injection.timestamp else 'N/A' }}</td>
+                                            <td><code>{{ injection.source_ip }}</code></td>
+                                            <td><span class="badge bg-danger">{{ injection.injection_type or 'SQL Injection' }}</span></td>
+                                            <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis;" title="{{ injection.payload }}">
+                                                <span class="attack-pattern">{{ injection.payload }}</span>
+                                            </td>
+                                            <td>{{ injection.target_parameter or 'N/A' }}</td>
+                                            <td>{{ injection.status_code }}</td>
+                                            <td>
+                                                <span class="badge {{ 'bg-danger' if injection.risk_level == 'Critical' else 'bg-warning' if injection.risk_level == 'High' else 'bg-info' }}">
+                                                    {{ injection.risk_level or 'Medium' }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-shield-alt fa-4x text-success mb-3"></i>
+                                <h4 class="text-success">未发现SQL注入攻击</h4>
+                                <p class="text-muted">当前时间段内未检测到SQL注入尝试</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 安全建议 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-lightbulb text-success me-2"></i>安全防护建议
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card bg-light h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>紧急处理</h6>
+                                        <ul class="list-unstyled">
+                                            <li>• 立即封禁高危IP地址</li>
+                                            <li>• 加强SQL注入防护规则</li>
+                                            <li>• 升级WAF规则库</li>
+                                            <li>• 启用实时告警通知</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-warning"><i class="fas fa-cog me-2"></i>规则优化</h6>
+                                        <ul class="list-unstyled">
+                                            <li>• 调整访问频率限制</li>
+                                            <li>• 优化异常检测算法</li>
+                                            <li>• 完善攻击特征库</li>
+                                            <li>• 增强日志分析能力</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-info"><i class="fas fa-chart-line me-2"></i>监控强化</h6>
+                                        <ul class="list-unstyled">
+                                            <li>• 建立安全态势感知</li>
+                                            <li>• 完善事件响应流程</li>
+                                            <li>• 加强威胁情报收集</li>
+                                            <li>• 定期安全评估</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <a href="/business" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>返回业务分析
+                    </a>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>刷新数据
+                        </button>
+                        <button class="btn btn-info" onclick="exportData()">
+                            <i class="fas fa-download me-2"></i>导出Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+    function refreshData() {
+        showNotification('数据刷新功能开发中，请手动刷新页面查看最新数据', 'info');
+    }
+    
+    function exportData() {
+        const threats = {{ security_threats|tojson|safe }};
+        const csvContent = "data:text/csv;charset=utf-8," 
+            + "检测时间,威胁类型,源IP,攻击路径,风险等级,状态码,User-Agent\\n"
+            + threats.map(threat => 
+                `"${threat.timestamp || 'N/A'}","${threat.threat_type || 'Unknown'}","${threat.source_ip}","${threat.attack_path}","${threat.risk_level || 'Low'}","${threat.status_code}","${threat.user_agent || 'N/A'}"`
+            ).join('\\n');
+            
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `安全分析_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+        notification.innerHTML = `
+            <i class="fas fa-info-circle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 4000);
+    }
+    
+    // 监听全局时间变化事件
+    window.addEventListener('globalTimeChanged', function(event) {
+        const timeState = event.detail;
+        console.log('Global time changed:', timeState);
+        showNotification(`时间范围已更新: ${timeState.displayText}`, 'danger');
+    });
+    
+    // 页面加载完成后统计
+    document.addEventListener('DOMContentLoaded', function() {
+        const threatCount = {{ security_threats|length }};
+        const highRiskCount = document.querySelectorAll('.risk-high, .risk-critical').length;
+        
+        console.log(`安全分析完成: 发现${threatCount}个威胁，其中${highRiskCount}个高危`);
+        
+        // 高亮高危威胁
+        document.querySelectorAll('.risk-critical, .risk-high').forEach(row => {
+            row.style.fontWeight = 'bold';
+        });
+    });
+    </script>
+{% endblock %}

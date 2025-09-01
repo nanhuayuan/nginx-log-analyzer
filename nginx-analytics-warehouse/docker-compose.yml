@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # ClickHouse 数据库
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: nginx-analytics-clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"    # HTTP接口
+      - "9000:9000"    # Native接口
+    volumes:
+      - ./volumes/clickhouse/data:/var/lib/clickhouse
+      - ./volumes/clickhouse/logs:/var/log/clickhouse-server
+      - ./config/clickhouse/config.xml:/etc/clickhouse-server/config.xml
+      - ./config/clickhouse/users.xml:/etc/clickhouse-server/users.xml
+      - ./ddl:/docker-entrypoint-initdb.d  # 自动执行建表语句
+    environment:
+      CLICKHOUSE_DB: nginx_analytics
+      CLICKHOUSE_USER: analytics_user
+      CLICKHOUSE_PASSWORD: analytics_password
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Grafana 数据可视化
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: nginx-analytics-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./volumes/grafana:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_FEATURE_TOGGLES_ENABLE: publicDashboards
+      GF_SERVER_ROOT_URL: http://localhost:3000/
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    user: "472"
+
+  # Apache Superset 数据可视化平台
+  superset-redis:
+    image: redis:7-alpine
+    container_name: nginx-analytics-redis
+    restart: unless-stopped
+    volumes:
+      - ./volumes/redis:/data
+
+  superset-postgres:
+    image: postgres:15-alpine
+    container_name: nginx-analytics-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: superset
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset123
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+
+  superset:
+    image: apache/superset:3.0.0
+    container_name: nginx-analytics-superset
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_CONFIG_PATH: /app/superset_config.py
+      DATABASE_URL: postgresql+psycopg2://superset:superset123@superset-postgres:5432/superset
+      REDIS_URL: redis://superset-redis:6379/0
+      SUPERSET_SECRET_KEY: 'nginx-analytics-superset-secret-key-2024'
+    volumes:
+      - ./config/superset/superset_config.py:/app/superset_config.py
+      - ./volumes/superset:/app/superset_home
+    depends_on:
+      - superset-postgres
+      - superset-redis
+      - clickhouse
+    command: |
+      bash -c "
+        pip install clickhouse-connect &&
+        superset fab create-admin --username admin --firstname Admin --lastname User --email admin@nginx-analytics.com --password admin123 &&
+        superset db upgrade &&
+        superset init &&
+        gunicorn --bind 0.0.0.0:8088 --workers 4 --timeout 200 --access-logfile - --error-logfile - superset.app:create_app()
+      "
+
+  # Nginx Log Processor - 数据处理服务
+  log-processor:
+    build: 
+      context: .
+      dockerfile: Dockerfile.processor
+    container_name: nginx-analytics-processor
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data                    # 日志数据目录
+      - ./logs:/app/logs                    # 处理日志
+      - ./config:/app/config                # 配置文件
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: analytics_user
+      CLICKHOUSE_PASSWORD: analytics_password
+      CLICKHOUSE_DATABASE: nginx_analytics
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    profiles:
+      - processor  # 可选启动
+
+volumes:
+  clickhouse-data:
+  grafana-data:
+  postgres-data:
+  redis-data:
+
+networks:
+  default:
+    name: nginx-analytics-network
+    driver: bridge

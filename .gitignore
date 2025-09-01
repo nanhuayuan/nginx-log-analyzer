@@ -161,3 +161,21 @@ Nginx日志下载需求.txt
 /light-data-platform/database/
 /light-data-platform/backups/
 /light-data-platform/sample_nginx_logs/
+
+# Python
+.venv/
+
+
+
+# IDE
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.temp
+# 处理记录和日志
+/nginx-analytics-warehouse/nginx_logs/
+/nginx-analytics-warehouse/processors/processed_logs_complete.json
+/nginx-analytics-warehouse/volumes/
+/nginx-analytics-warehouse/nul

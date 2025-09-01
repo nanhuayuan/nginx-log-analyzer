@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}接口性能分析 - 业务分析平台{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1><i class="fas fa-chart-line"></i> 接口性能分析</h1>
+        <p class="text-muted">深度分析接口性能表现，识别性能问题，支撑业务决策</p>
+        <hr>
+    </div>
+</div>
+
+<!-- 时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+
+<!-- 核心指标仪表板 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div>
+                        <h5><i class="fas fa-globe"></i> 总访问量</h5>
+                        <h3>{{ overview.total_pv | default(0) | number_format }}</h3>
+                        <small>总请求数</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div>
+                        <h5><i class="fas fa-check-circle"></i> 成功率</h5>
+                        <h3>{{ "%.2f"|format(overview.success_rate | default(0)) }}%</h3>
+                        <small>正常响应占比</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div>
+                        <h5><i class="fas fa-clock"></i> 平均响应</h5>
+                        <h3>{{ overview.avg_response_ms | default(0) }}ms</h3>
+                        <small>响应时间</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div>
+                        <h5><i class="fas fa-exclamation-triangle"></i> 慢请求</h5>
+                        <h3>{{ overview.slow_requests | default(0) }}</h3>
+                        <small>超过3秒的请求</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 性能分布图表 -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-pie"></i> 平台流量分布</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="platformChart" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar"></i> 性能健康度</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="healthChart" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 热门接口排行榜 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-fire"></i> 热门接口排行榜</h5>
+                <div>
+                    <select id="hotApiLimit" class="form-select form-select-sm">
+                        <option value="10">前10名</option>
+                        <option value="20" selected>前20名</option>
+                        <option value="50">前50名</option>
+                        <option value="100">前100名</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>排名</th>
+                                <th>接口</th>
+                                <th>请求量</th>
+                                <th>平均响应(ms)</th>
+                                <th>P95响应(ms)</th>
+                                <th>成功率</th>
+                                <th>错误率</th>
+                                <th>主要平台</th>
+                                <th>健康状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hotApiTable">
+                            {% for api in hot_apis %}
+                            <tr>
+                                <td><span class="badge bg-primary">{{ loop.index }}</span></td>
+                                <td>
+                                    <code style="font-size: 0.9em;">{{ api.api }}</code>
+                                    <br>
+                                    <small class="text-muted">{{ api.api_category }}</small>
+                                </td>
+                                <td><strong>{{ api.total_requests | number_format }}</strong></td>
+                                <td>
+                                    <span class="{% if api.avg_response_ms > 3000 %}text-danger{% elif api.avg_response_ms > 1000 %}text-warning{% else %}text-success{% endif %}">
+                                        {{ api.avg_response_ms }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="{% if api.p95_ms > 5000 %}text-danger{% elif api.p95_ms > 2000 %}text-warning{% else %}text-success{% endif %}">
+                                        {{ api.p95_ms }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="{% if api.success_rate < 95 %}text-danger{% elif api.success_rate < 99 %}text-warning{% else %}text-success{% endif %}">
+                                        {{ "%.2f"|format(api.success_rate) }}%
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="{% if api.error_rate > 5 %}text-danger{% elif api.error_rate > 1 %}text-warning{% else %}text-success{% endif %}">
+                                        {{ "%.2f"|format(api.error_rate) }}%
+                                    </span>
+                                </td>
+                                <td><span class="badge bg-info">{{ api.main_platform }}</span></td>
+                                <td>
+                                    {% if api.health_status == 'Healthy' %}
+                                    <span class="badge bg-success">健康</span>
+                                    {% elif api.health_status == 'Warning' %}
+                                    <span class="badge bg-warning">警告</span>
+                                    {% elif api.health_status == 'Critical' %}
+                                    <span class="badge bg-danger">严重</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">未知</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 最慢接口分析 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-turtle"></i> 最慢接口分析</h5>
+                <div>
+                    <select id="slowApiLimit" class="form-select form-select-sm">
+                        <option value="10">前10名</option>
+                        <option value="20" selected>前20名</option>
+                        <option value="50">前50名</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>排名</th>
+                                <th>接口</th>
+                                <th>平均响应(ms)</th>
+                                <th>P95响应(ms)</th>
+                                <th>慢请求数</th>
+                                <th>后端处理(ms)</th>
+                                <th>传输时间(ms)</th>
+                                <th>成功率</th>
+                                <th>问题类型</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for api in slow_apis %}
+                            <tr>
+                                <td><span class="badge bg-warning">{{ loop.index }}</span></td>
+                                <td>
+                                    <code style="font-size: 0.9em;">{{ api.api }}</code>
+                                    <br>
+                                    <small class="text-muted">{{ api.main_platform }}</small>
+                                </td>
+                                <td>
+                                    <span class="text-danger">
+                                        <strong>{{ api.avg_response_ms }}</strong>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="text-danger">
+                                        {{ api.p95_ms }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-danger">{{ api.slow_count }}</span>
+                                </td>
+                                <td>{{ api.avg_process_ms }}</td>
+                                <td>{{ api.avg_transfer_ms }}</td>
+                                <td>
+                                    <span class="{% if api.success_rate < 95 %}text-danger{% else %}text-success{% endif %}">
+                                        {{ "%.2f"|format(api.success_rate) }}%
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if api.problem_type == '后端处理慢' %}
+                                    <span class="badge bg-danger">{{ api.problem_type }}</span>
+                                    {% elif api.problem_type == '数据传输慢' %}
+                                    <span class="badge bg-warning">{{ api.problem_type }}</span>
+                                    {% elif api.problem_type == '整体响应慢' %}
+                                    <span class="badge bg-info">{{ api.problem_type }}</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ api.problem_type }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 高错误率接口告警 -->
+{% if error_alerts %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5><i class="fas fa-exclamation-circle"></i> 高错误率接口告警</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>接口</th>
+                                <th>总请求数</th>
+                                <th>错误数</th>
+                                <th>错误率</th>
+                                <th>主要错误码</th>
+                                <th>平台</th>
+                                <th>告警级别</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alert in error_alerts %}
+                            <tr>
+                                <td><code>{{ alert.api }}</code></td>
+                                <td>{{ alert.total_requests }}</td>
+                                <td><span class="badge bg-danger">{{ alert.error_count }}</span></td>
+                                <td>
+                                    <span class="text-danger">
+                                        <strong>{{ "%.2f"|format(alert.error_rate) }}%</strong>
+                                    </span>
+                                </td>
+                                <td><span class="badge bg-secondary">{{ alert.main_error_code }}</span></td>
+                                <td><span class="badge bg-info">{{ alert.main_platform }}</span></td>
+                                <td>
+                                    {% if alert.alert_level == 'HIGH' %}
+                                    <span class="badge bg-danger">高</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">中</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// 平台分布饼图
+const platformData = {
+    labels: [{% for platform in platform_distribution %}'{{ platform.platform }}'{% if not loop.last %},{% endif %}{% endfor %}],
+    datasets: [{
+        data: [{% for platform in platform_distribution %}{{ platform.requests }}{% if not loop.last %},{% endif %}{% endfor %}],
+        backgroundColor: [
+            '#FF6384',
+            '#36A2EB', 
+            '#FFCE56',
+            '#4BC0C0',
+            '#9966FF',
+            '#FF9F40'
+        ]
+    }]
+};
+
+const platformChart = new Chart(document.getElementById('platformChart'), {
+    type: 'pie',
+    data: platformData,
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom',
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = ((context.parsed / total) * 100).toFixed(1);
+                        return context.label + ': ' + context.parsed.toLocaleString() + ' (' + percentage + '%)';
+                    }
+                }
+            }
+        }
+    }
+});
+
+// 健康状态分析
+const healthStatusData = {
+    healthy: {{ hot_apis | selectattr("health_status", "equalto", "Healthy") | list | length }},
+    warning: {{ hot_apis | selectattr("health_status", "equalto", "Warning") | list | length }},
+    critical: {{ hot_apis | selectattr("health_status", "equalto", "Critical") | list | length }}
+};
+
+const healthChart = new Chart(document.getElementById('healthChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['健康', '警告', '严重'],
+        datasets: [{
+            data: [healthStatusData.healthy, healthStatusData.warning, healthStatusData.critical],
+            backgroundColor: ['#28a745', '#ffc107', '#dc3545']
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom',
+            }
+        }
+    }
+});
+
+// 动态调整显示数量
+document.getElementById('hotApiLimit').addEventListener('change', function() {
+    const limit = this.value;
+    // 这里可以发起AJAX请求重新加载数据
+    console.log('调整热门接口显示数量:', limit);
+});
+
+document.getElementById('slowApiLimit').addEventListener('change', function() {
+    const limit = this.value;
+    // 这里可以发起AJAX请求重新加载数据
+    console.log('调整慢接口显示数量:', limit);
+});
+
+// 数字格式化过滤器
+function numberFormat(num) {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+</script>
+{% endblock %}

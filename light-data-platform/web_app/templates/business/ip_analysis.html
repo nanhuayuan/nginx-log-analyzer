@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}IP来源分析 - Nginx日志分析平台{% endblock %}
+
+{% block content %}
+<!-- 时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+<style>
+    .metric-card { 
+        border-radius: 10px; 
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        transition: transform 0.2s;
+    }
+    .metric-card:hover { transform: translateY(-2px); }
+    .table-responsive { max-height: 500px; overflow-y: auto; }
+    .risk-high { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+    .risk-medium { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+    .risk-low { background-color: #d4edda; border-left: 4px solid #28a745; }
+    .geo-card { border-radius: 8px; margin-bottom: 10px; }
+</style>
+
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/business">业务分析</a></li>
+                        <li class="breadcrumb-item active">08.IP来源分析</li>
+                    </ol>
+                </nav>
+                <h2><i class="fas fa-globe text-success me-2"></i>IP来源分析</h2>
+                <p class="text-muted">Self功能对标 - 客户端分布分析，地域访问统计，安全风险识别</p>
+            </div>
+        </div>
+
+        <!-- IP统计概览 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card bg-primary text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-users fa-2x mb-2"></i>
+                        <div class="h3">{{ "{:,}".format(client_diversity.total_ips or 0) }}</div>
+                        <div class="small">独立IP数</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-success text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-map-marker-alt fa-2x mb-2"></i>
+                        <div class="h3">{{ client_diversity.countries or 0 }}</div>
+                        <div class="small">访问国家</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-info text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-city fa-2x mb-2"></i>
+                        <div class="h3">{{ client_diversity.cities or 0 }}</div>
+                        <div class="small">访问城市</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-warning text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-shield-alt fa-2x mb-2"></i>
+                        <div class="h3">{{ suspicious_activities|length }}</div>
+                        <div class="small">可疑活动</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOP客户端分析 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-bar text-primary me-2"></i>TOP50 客户端IP分析
+                        </h5>
+                        <small class="text-muted">按访问量排序</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>IP地址</th>
+                                        <th>请求数量</th>
+                                        <th>占比</th>
+                                        <th>地理位置</th>
+                                        <th>ISP</th>
+                                        <th>访问时长</th>
+                                        <th>平均响应时间</th>
+                                        <th>成功率</th>
+                                        <th>风险评级</th>
+                                        <th>标签</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for client in top_clients %}
+                                    <tr class="risk-{{ client.risk_level.lower() if client.risk_level else 'low' }}">
+                                        <td><span class="badge bg-info">{{ loop.index }}</span></td>
+                                        <td><code>{{ client.ip }}</code></td>
+                                        <td><strong class="text-primary">{{ "{:,}".format(client.request_count) }}</strong></td>
+                                        <td>{{ "{:.1f}".format(client.percentage or 0) }}%</td>
+                                        <td>{{ client.location or 'Unknown' }}</td>
+                                        <td>{{ client.isp or 'N/A' }}</td>
+                                        <td>{{ "{:.1f}".format(client.session_duration or 0) }}分钟</td>
+                                        <td>{{ "{:.0f}".format(client.avg_response_ms or 0) }}ms</td>
+                                        <td><span class="text-success">{{ "{:.1f}".format(client.success_rate or 0) }}%</span></td>
+                                        <td>
+                                            <span class="badge {{ 'bg-danger' if client.risk_level == 'High' else 'bg-warning' if client.risk_level == 'Medium' else 'bg-success' }}">
+                                                {{ client.risk_level or 'Low' }}
+                                            </span>
+                                        </td>
+                                        <td><small>{{ client.tags or '正常用户' }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 地理分布 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-globe-americas text-success me-2"></i>地理分布统计
+                        </h5>
+                        <small class="text-muted">全球访问热力分析</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% for geo in geo_distribution %}
+                            <div class="col-md-4 mb-3">
+                                <div class="card geo-card bg-light">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="mb-1">{{ geo.country or 'Unknown' }}</h6>
+                                                <small class="text-muted">{{ geo.city or 'N/A' }}</small>
+                                            </div>
+                                            <div class="text-end">
+                                                <div class="h5 text-primary mb-0">{{ "{:,}".format(geo.request_count or 0) }}</div>
+                                                <small class="text-success">{{ "{:.1f}".format(geo.percentage or 0) }}%</small>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <div class="progress" style="height: 6px;">
+                                                <div class="progress-bar bg-success" style="width: {{ geo.percentage or 0 }}%"></div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <small class="text-muted">
+                                                <i class="fas fa-users me-1"></i>{{ geo.unique_ips or 0 }}个IP
+                                                <i class="fas fa-clock ms-2 me-1"></i>{{ "{:.0f}".format(geo.avg_response_ms or 0) }}ms
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 可疑活动监控 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>可疑活动监控
+                        </h5>
+                        <small class="text-muted">安全威胁识别与防护</small>
+                    </div>
+                    <div class="card-body">
+                        {% if suspicious_activities %}
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>IP地址</th>
+                                            <th>可疑行为</th>
+                                            <th>风险等级</th>
+                                            <th>检测时间</th>
+                                            <th>详细描述</th>
+                                            <th>建议措施</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for activity in suspicious_activities %}
+                                        <tr>
+                                            <td><code>{{ activity.ip }}</code></td>
+                                            <td><span class="badge bg-warning">{{ activity.suspicious_behavior or 'Unknown' }}</span></td>
+                                            <td>
+                                                <span class="badge {{ 'bg-danger' if activity.risk_level == 'High' else 'bg-warning' if activity.risk_level == 'Medium' else 'bg-info' }}">
+                                                    {{ activity.risk_level or 'Low' }}
+                                                </span>
+                                            </td>
+                                            <td>{{ activity.detection_time.strftime('%H:%M:%S') if activity.detection_time else 'N/A' }}</td>
+                                            <td><small>{{ activity.description or '暂无详细信息' }}</small></td>
+                                            <td><small>{{ activity.recommendation or '持续监控' }}</small></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-shield-alt fa-4x text-success mb-3"></i>
+                                <h4 class="text-success">系统安全状态良好</h4>
+                                <p class="text-muted">当前时间段内未检测到可疑活动</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <a href="/business" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>返回业务分析
+                    </a>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>刷新数据
+                        </button>
+                        <button class="btn btn-info" onclick="exportData()">
+                            <i class="fas fa-download me-2"></i>导出Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+    function refreshData() {
+        showNotification('数据刷新功能开发中，请手动刷新页面查看最新数据', 'info');
+    }
+    
+    function exportData() {
+        const topClients = {{ top_clients|tojson|safe }};
+        const csvContent = "data:text/csv;charset=utf-8," 
+            + "排名,IP地址,请求数量,占比,地理位置,ISP,访问时长,平均响应时间,成功率,风险评级,标签\\n"
+            + topClients.map((client, index) => 
+                `${index + 1},"${client.ip}",${client.request_count},${(client.percentage || 0).toFixed(1)},"${client.location || 'Unknown'}","${client.isp || 'N/A'}",${(client.session_duration || 0).toFixed(1)},${(client.avg_response_ms || 0).toFixed(0)},${(client.success_rate || 0).toFixed(1)},"${client.risk_level || 'Low'}","${client.tags || '正常用户'}"`
+            ).join('\\n');
+            
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `IP来源分析_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+        notification.innerHTML = `
+            <i class="fas fa-info-circle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 4000);
+    }
+    
+    // 监听全局时间变化事件
+    window.addEventListener('globalTimeChanged', function(event) {
+        const timeState = event.detail;
+        console.log('Global time changed:', timeState);
+        showNotification(`时间范围已更新: ${timeState.displayText}`, 'primary');
+    });
+    
+    // 页面加载完成后统计
+    document.addEventListener('DOMContentLoaded', function() {
+        const topClientCount = {{ top_clients|length }};
+        const suspiciousCount = {{ suspicious_activities|length }};
+        const totalIPs = {{ client_diversity.total_ips or 0 }};
+        
+        console.log(`IP来源分析完成: ${totalIPs}个独立IP, TOP${topClientCount}客户端, ${suspiciousCount}个可疑活动`);
+        
+        // 高亮高风险IP
+        document.querySelectorAll('.risk-high').forEach(row => {
+            row.style.fontWeight = 'bold';
+        });
+    });
+    </script>
+{% endblock %}

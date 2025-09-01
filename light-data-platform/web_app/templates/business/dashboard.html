@@ -1,0 +1,563 @@
+{% extends "base.html" %}
+
+{% block title %}业务分析 - Nginx日志分析平台{% endblock %}
+
+{% block content %}
+<!-- 时间选择器 -->
+{% include 'components/global_time_selector.html' %}
+<style>
+        .metric-card { 
+            border-radius: 10px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            transition: transform 0.2s;
+        }
+        .metric-card:hover { transform: translateY(-2px); }
+        .metric-value { 
+            font-size: 2.5rem; 
+            font-weight: bold; 
+            color: #2c3e50;
+        }
+        .metric-label { 
+            color: #7f8c8d; 
+            font-size: 0.9rem;
+        }
+        .health-healthy { color: #27ae60; }
+        .health-warning { color: #f39c12; }
+        .health-critical { color: #e74c3c; }
+        .alert-high { border-left: 4px solid #e74c3c; }
+        .alert-medium { border-left: 4px solid #f39c12; }
+        .table-responsive { max-height: 400px; overflow-y: auto; }
+        .api-column { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+        .chart-container { height: 300px; }
+</style>
+        <!-- 核心业务指标 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card bg-primary text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-eye fa-2x mb-2"></i>
+                        <div class="metric-value">{{ "{:,}".format(overview.total_pv) }}</div>
+                        <div class="metric-label">总访问量 (24h)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-success text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-users fa-2x mb-2"></i>
+                        <div class="metric-value">{{ "{:,}".format(overview.unique_users) }}</div>
+                        <div class="metric-label">独立用户数</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-info text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
+                        <div class="metric-value">{{ "{:.0f}".format(overview.avg_response_ms) }}ms</div>
+                        <div class="metric-label">平均响应时间</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-warning text-white h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-check-circle fa-2x mb-2"></i>
+                        <div class="metric-value">{{ "{:.1f}".format(overview.success_rate) }}%</div>
+                        <div class="metric-label">成功率</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主要分析内容 -->
+        <div class="row">
+            <!-- 热门接口 TOP10 -->
+            <div class="col-xl-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-fire text-danger me-2"></i>热门接口 TOP10
+                        </h5>
+                        <small class="text-muted">按访问量排序</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>接口</th>
+                                        <th>请求数</th>
+                                        <th>平均响应</th>
+                                        <th>成功率</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for api in hot_apis %}
+                                    <tr>
+                                        <td class="api-column" title="{{ api.api }}">{{ api.api }}</td>
+                                        <td><span class="badge bg-primary">{{ "{:,}".format(api.total_requests) }}</span></td>
+                                        <td>{{ "{:.0f}".format(api.avg_response_ms) }}ms</td>
+                                        <td>{{ "{:.1f}".format(api.success_rate) }}%</td>
+                                        <td>
+                                            <span class="badge 
+                                                {% if api.health_status == 'Healthy' %}bg-success
+                                                {% elif api.health_status == 'Warning' %}bg-warning
+                                                {% else %}bg-danger{% endif %}">
+                                                {{ api.health_status }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 慢接口 TOP10 -->
+            <div class="col-xl-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-exclamation-triangle text-warning me-2"></i>慢接口 TOP10
+                        </h5>
+                        <small class="text-muted">按响应时间排序</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>接口</th>
+                                        <th>平均响应</th>
+                                        <th>P95响应</th>
+                                        <th>慢请求</th>
+                                        <th>问题类型</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for api in slow_apis %}
+                                    <tr>
+                                        <td class="api-column" title="{{ api.api }}">{{ api.api }}</td>
+                                        <td><span class="text-danger fw-bold">{{ "{:.0f}".format(api.avg_response_ms) }}ms</span></td>
+                                        <td>{{ "{:.0f}".format(api.p95_ms) }}ms</td>
+                                        <td>{{ api.slow_count }}</td>
+                                        <td><span class="badge bg-secondary">{{ api.problem_type }}</span></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 平台分布和错误告警 -->
+        <div class="row">
+            <!-- 平台流量分布 -->
+            <div class="col-xl-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-mobile-alt me-2"></i>平台流量分布
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% for platform in platform_dist %}
+                            <div class="col-md-4 mb-3">
+                                <div class="text-center">
+                                    <h6>{{ platform.platform }}</h6>
+                                    <div class="progress mb-2" style="height: 25px;">
+                                        <div class="progress-bar" style="width: {{ platform.percentage }}%">
+                                            {{ "{:.1f}".format(platform.percentage) }}%
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ "{:,}".format(platform.requests) }} 请求 | 
+                                        {{ "{:,}".format(platform.unique_users) }} 用户
+                                    </small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 错误告警 -->
+            <div class="col-xl-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-exclamation-circle text-danger me-2"></i>错误告警
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% if error_alerts %}
+                            {% for alert in error_alerts[:5] %}
+                            <div class="alert alert-sm {{ 'alert-high' if alert.alert_level == 'HIGH' else 'alert-medium' }} mb-2">
+                                <div class="d-flex justify-content-between">
+                                    <small class="fw-bold">{{ alert.api[:40] }}{% if alert.api|length > 40 %}...{% endif %}</small>
+                                    <span class="badge bg-danger">{{ "{:.1f}".format(alert.error_rate) }}%</span>
+                                </div>
+                                <small class="text-muted">
+                                    {{ alert.error_count }}/{{ alert.total_requests }} 请求失败
+                                </small>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center text-success">
+                                <i class="fas fa-check-circle fa-3x mb-2"></i>
+                                <p>暂无高错误率接口</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 扩展分析维度 - Self对标 -->
+        <div class="row">
+            <!-- 状态码分析 -->
+            <div class="col-xl-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-code text-success me-2"></i>状态码分布
+                        </h5>
+                        <small class="text-muted">HTTP响应状态</small>
+                    </div>
+                    <div class="card-body">
+                        {% for status in status_dist %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <span class="badge {{ 'bg-success' if status.status_type == 'Success' else 'bg-danger' if status.status_type == 'Server Error' else 'bg-warning' }}">
+                                    {{ status.status_code }}
+                                </span>
+                                <small class="text-muted ms-2">{{ status.status_type }}</small>
+                            </div>
+                            <div class="text-end">
+                                <strong>{{ "{:,}".format(status.request_count) }}</strong>
+                                <small class="text-muted">({{ status.percentage }}%)</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 时间峰谷分析 -->
+            <div class="col-xl-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-area text-info me-2"></i>访问峰谷分析
+                        </h5>
+                        <small class="text-muted">业务时间模式</small>
+                    </div>
+                    <div class="card-body">
+                        {% if peak_analysis %}
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="border-end">
+                                    <h4 class="text-primary">{{ "{:,}".format(peak_analysis.peak_requests) }}</h4>
+                                    <small class="text-muted">峰值请求数<br>{{ peak_analysis.peak_hour }}</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <h4 class="text-secondary">{{ "{:,}".format(peak_analysis.valley_requests) }}</h4>
+                                <small class="text-muted">谷值请求数<br>{{ peak_analysis.valley_hour }}</small>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="text-center">
+                            <span class="badge {{ 'bg-danger' if peak_analysis.traffic_volatility == 'High' else 'bg-warning' if peak_analysis.traffic_volatility == 'Medium' else 'bg-success' }}">
+                                波动水平: {{ peak_analysis.traffic_volatility }}
+                            </span>
+                            <small class="text-muted ms-2">峰谷比: {{ peak_analysis.peak_valley_ratio }}:1</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- IP来源和客户端分析 -->
+        <div class="row">
+            <!-- IP地理分布 -->
+            <div class="col-xl-8">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-globe text-primary me-2"></i>IP来源分析
+                        </h5>
+                        <small class="text-muted">客户端地理分布</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% for geo in geo_dist %}
+                            <div class="col-md-6 mb-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">{{ geo.region }}</h6>
+                                        <small class="text-muted">
+                                            {{ "{:,}".format(geo.unique_ips) }} 独立IP | 
+                                            {{ "{:.0f}".format(geo.avg_response_ms) }}ms 平均响应
+                                        </small>
+                                    </div>
+                                    <div class="text-end">
+                                        <strong>{{ geo.percentage }}%</strong>
+                                        <div>
+                                            <span class="badge {{ 'bg-success' if geo.security_level == 'Trusted' else 'bg-warning' }}">
+                                                {{ geo.security_level }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="progress mt-2" style="height: 6px;">
+                                    <div class="progress-bar" style="width: {{ geo.percentage }}%"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 客户端多样性 -->
+            <div class="col-xl-4">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-users text-success me-2"></i>客户端多样性
+                        </h5>
+                        <small class="text-muted">用户分布特征</small>
+                    </div>
+                    <div class="card-body">
+                        {% if ip_diversity %}
+                        <div class="text-center mb-3">
+                            <h3 class="text-primary">{{ ip_diversity.diversity_score }}%</h3>
+                            <small class="text-muted">多样性评分</small>
+                        </div>
+                        <hr>
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <strong>{{ "{:,}".format(ip_diversity.total_unique_ips) }}</strong>
+                                <br><small class="text-muted">独立IP数</small>
+                            </div>
+                            <div class="col-6">
+                                <strong>{{ "{:.1f}".format(ip_diversity.requests_per_ip) }}</strong>
+                                <br><small class="text-muted">平均请求数/IP</small>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="text-center">
+                            <span class="badge {{ 'bg-warning' if ip_diversity.user_concentration == 'Concentrated' else 'bg-info' }}">
+                                {{ ip_diversity.user_concentration }}
+                            </span>
+                            <br><small class="text-muted">用户集中度</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Self功能对标 - 详细分析入口 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-bar me-2"></i>Self功能对标 - 12维度分析
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <a href="/business/api-health" class="btn btn-outline-primary w-100">
+                                    <i class="fas fa-heartbeat me-2"></i>01.接口性能分析
+                                </a>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <a href="/business/traffic-analysis" class="btn btn-outline-info w-100">
+                                    <i class="fas fa-chart-line me-2"></i>02.服务层级分析
+                                </a>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <button class="btn btn-outline-warning w-100" onclick="loadAnalysis('slow-requests')">
+                                    <i class="fas fa-clock me-2"></i>03.慢请求分析
+                                </button>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <button class="btn btn-outline-success w-100" onclick="loadAnalysis('status-analysis')">
+                                    <i class="fas fa-code me-2"></i>04.状态码统计
+                                </button>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <button class="btn btn-outline-secondary w-100" onclick="loadAnalysis('time-dimension')">
+                                    <i class="fas fa-chart-area me-2"></i>05.时间维度分析
+                                </button>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <button class="btn btn-outline-dark w-100" onclick="loadAnalysis('performance-stability')">
+                                    <i class="fas fa-tachometer-alt me-2"></i>06.性能稳定性
+                                </button>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <button class="btn btn-outline-primary w-100" onclick="loadAnalysis('summary-report')">
+                                    <i class="fas fa-file-alt me-2"></i>07.综合报告
+                                </button>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <button class="btn btn-outline-info w-100" onclick="loadAnalysis('ip-analysis')">
+                                    <i class="fas fa-globe me-2"></i>08.IP来源分析
+                                </button>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <button class="btn btn-outline-warning w-100" onclick="loadAnalysis('request-headers')">
+                                    <i class="fas fa-server me-2"></i>10.请求头分析
+                                </button>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <button class="btn btn-outline-success w-100" onclick="loadAnalysis('header-performance')">
+                                    <i class="fas fa-link me-2"></i>11.请求头性能关联
+                                </button>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <a href="/search" class="btn btn-outline-secondary w-100">
+                                    <i class="fas fa-search me-2"></i>自定义查询
+                                </a>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <button class="btn btn-outline-danger w-100" onclick="loadAnalysis('security-insights')">
+                                    <i class="fas fa-shield-alt me-2"></i>安全分析
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block scripts %}
+    
+    <script>
+    // 监听全局时间变化事件
+    window.addEventListener('globalTimeChanged', function(event) {
+        const timeState = event.detail;
+        console.log('Business dashboard time changed:', timeState);
+        
+        // 重新加载页面并传递时间参数
+        const url = new URL(window.location);
+        url.searchParams.set('start', timeState.startTime);
+        url.searchParams.set('end', timeState.endTime);
+        window.location.href = url.toString();
+    });
+    
+    // 动态加载分析功能
+    function loadAnalysis(analysisType) {
+        console.log('Loading analysis:', analysisType);
+        
+        // 页面路由映射 - 使用专门的分析页面而非JSON API
+        const pageRoutes = {
+            'slow-requests': '/business/slow-analysis',
+            'status-analysis': '/business/status-analysis', 
+            'time-dimension': '/business/time-analysis',
+            'performance-stability': '/business/performance-analysis',
+            'ip-analysis': '/business/ip-analysis',
+            'security-insights': '/business/security-analysis',
+            'summary-report': '/business/summary-report',
+            'request-headers': '/business/header-analysis',
+            'header-performance': '/business/header-performance'
+        };
+        
+        const pageRoute = pageRoutes[analysisType];
+        if (pageRoute) {
+            // 跳转到专门的分析页面
+            window.location.href = pageRoute;
+        } else {
+            alert('该功能正在开发中，敬请期待！');
+        }
+    }
+    
+    // 页面加载完成后的初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Business Dashboard loaded successfully');
+        
+        // 可以添加实时数据刷新逻辑
+        // setInterval(refreshMetrics, 30000); // 30秒刷新一次
+    });
+    
+    // 实时指标刷新
+    function refreshMetrics() {
+        fetch('/api/business/overview')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // 更新核心指标
+                    console.log('Metrics updated:', data.data);
+                }
+            })
+            .catch(error => console.error('Error refreshing metrics:', error));
+    }
+    
+    // 监听全局时间变化事件
+    window.addEventListener('globalTimeChanged', function(event) {
+        const timeState = event.detail;
+        console.log('Global time changed:', timeState);
+        
+        // 刷新页面数据
+        refreshDashboardData(timeState);
+    });
+    
+    // 根据时间范围刷新Dashboard数据
+    function refreshDashboardData(timeState) {
+        // 这里可以根据时间范围重新加载数据
+        console.log('Refreshing dashboard data for time range:', timeState.displayText);
+        
+        // 取消自动刷新，避免频繁reload
+        // TODO: 在实际应用中，可以通过AJAX调用API更新特定的数据块
+        // 例如：updateMetrics(timeState.startTime, timeState.endTime);
+        
+        // 暂时注释掉页面刷新，避免用户体验问题
+        // location.reload(); 
+        
+        // 显示时间范围变更提示
+        showTimeRangeUpdateNotification(timeState.displayText);
+    }
+    
+    // 显示时间范围更新通知
+    function showTimeRangeUpdateNotification(displayText) {
+        // 创建通知元素
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-info alert-dismissible fade show position-fixed';
+        notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+        notification.innerHTML = `
+            <i class="fas fa-clock me-2"></i>时间范围已更新为: ${displayText}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // 3秒后自动移除
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 3000);
+    }
+    </script>
+{% endblock %}
