@@ -146,7 +146,44 @@ python validate_processing.py
 - 处理记录文件包含正确的统计信息
 - ADS表包含聚合数据
 
-## 8. 常见问题排查
+## 8. 数据持久化说明
+
+### 持久化存储卷
+系统使用Docker volumes实现数据持久化：
+
+```yaml
+volumes:
+  clickhouse_data: ClickHouse数据文件
+  clickhouse_logs: ClickHouse日志文件
+  grafana_data: Grafana配置和仪表板
+  postgres_data: Superset元数据
+  redis_data: Redis缓存数据
+  superset_home: Superset配置文件
+```
+
+### 数据备份和恢复
+```bash
+# 列出存储卷
+python manage_volumes.py list
+
+# 备份所有数据
+python manage_volumes.py backup ./data_backup
+
+# 从备份恢复数据  
+python manage_volumes.py restore ./data_backup
+
+# 查看存储使用情况
+python manage_volumes.py usage
+
+# 清理未使用的卷
+python manage_volumes.py clean
+```
+
+### 数据目录位置
+- **Windows**: `C:\ProgramData\docker\volumes\`
+- **Linux**: `/var/lib/docker/volumes/`
+
+## 9. 常见问题排查
 
 ### 问题1: Docker服务未启动
 ```bash
@@ -171,6 +208,10 @@ python main_simple.py start-services
 ### 问题4: 数据不一致
 - 清空数据重新处理：`python main_simple.py clear-all`
 - 强制重新处理：`python main_simple.py process --date YYYYMMDD --force`
+
+### 问题5: 数据丢失
+- 检查Docker volumes是否正常：`python manage_volumes.py list`
+- 从备份恢复：`python manage_volumes.py restore ./backup_path`
 
 ## 9. 开发调试
 

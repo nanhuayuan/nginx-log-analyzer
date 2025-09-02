@@ -206,40 +206,73 @@ def start_services():
     """启动服务"""
     print("启动ClickHouse等服务")
     
-    docker_compose_file = current_dir / "docker-compose-simple-fixed.yml"
+    # 查找docker-compose文件，优先使用新的目录结构
+    docker_dir = current_dir.parent / "docker"
+    docker_compose_file = docker_dir / "docker-compose.yml"
+    
+    # 兼容旧的文件位置
+    if not docker_compose_file.exists():
+        docker_compose_file = current_dir / "docker-compose-simple-fixed.yml"
+    
     if not docker_compose_file.exists():
         print("[ERROR] 找不到docker-compose配置文件")
+        print("期望位置:")
+        print(f"  1. {docker_dir / 'docker-compose.yml'}")
+        print(f"  2. {current_dir / 'docker-compose-simple-fixed.yml'}")
         return
     
     try:
-        subprocess.run([
+        # 切换到docker-compose文件所在目录
+        work_dir = docker_compose_file.parent
+        
+        result = subprocess.run([
             'docker-compose', 
             '-f', str(docker_compose_file), 
             'up', '-d'
-        ], check=True)
+        ], cwd=work_dir, check=True, capture_output=True, text=True)
+        
         print("[SUCCESS] 服务启动完成")
         print("访问地址:")
         print("   ClickHouse: http://localhost:8123")
         print("   Grafana: http://localhost:3000 (admin/admin123)")
         print("   Superset: http://localhost:8088 (admin/admin123)")
+        
+        # 显示启动的容器
+        print("\n启动的容器:")
+        containers_result = subprocess.run(['docker', 'ps', '--filter', 'name=nginx-analytics'], 
+                                         capture_output=True, text=True)
+        print(containers_result.stdout)
+        
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] 服务启动失败: {e}")
+        if e.stderr:
+            print(f"错误详情: {e.stderr}")
 
 def stop_services():
     """停止服务"""
     print("停止服务")
     
-    docker_compose_file = current_dir / "docker-compose-simple-fixed.yml"
+    # 查找docker-compose文件
+    docker_dir = current_dir.parent / "docker"
+    docker_compose_file = docker_dir / "docker-compose.yml"
+    
+    # 兼容旧的文件位置
+    if not docker_compose_file.exists():
+        docker_compose_file = current_dir / "docker-compose-simple-fixed.yml"
+    
     if not docker_compose_file.exists():
         print("[ERROR] 找不到docker-compose配置文件")
         return
     
     try:
+        # 切换到docker-compose文件所在目录
+        work_dir = docker_compose_file.parent
+        
         subprocess.run([
             'docker-compose', 
             '-f', str(docker_compose_file), 
             'down'
-        ], check=True)
+        ], cwd=work_dir, check=True)
         print("[SUCCESS] 服务已停止")
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] 停止服务失败: {e}")
