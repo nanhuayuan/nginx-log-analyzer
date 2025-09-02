@@ -3,6 +3,7 @@
 """
 ClickHouse数据库初始化脚本
 Database Initialization Script for ClickHouse
+使用DDL目录中的SQL文件进行初始化
 """
 
 import clickhouse_connect
@@ -10,7 +11,7 @@ import sys
 from pathlib import Path
 
 def create_database_and_tables():
-    """创建数据库和所有必需的表"""
+    """使用DDL文件创建数据库和所有必需的表"""
     
     # 连接配置
     config = {
@@ -21,176 +22,45 @@ def create_database_and_tables():
     }
     
     print("=" * 60)
-    print("   ClickHouse数据库初始化")
-    print("   Database Initialization")
+    print("   ClickHouse数据库初始化 (使用DDL文件)")
+    print("   Database Initialization (Using DDL Files)")
     print("=" * 60)
     
     try:
-        # 首先连接到默认数据库创建nginx_analytics数据库
-        print("步骤1: 连接ClickHouse服务器...")
-        client = clickhouse_connect.get_client(
-            host=config['host'],
-            port=config['port'],
-            username=config['username'],
-            password=config['password']
-        )
+        # 执行DDL脚本
+        print("步骤1: 执行DDL脚本...")
+        ddl_dir = Path(__file__).parent.parent / "ddl"
+        ddl_script = ddl_dir / "execute_ddl.py"
         
-        # 创建数据库
-        print("步骤2: 创建数据库 nginx_analytics...")
-        client.command('CREATE DATABASE IF NOT EXISTS nginx_analytics')
-        print("[OK] 数据库创建成功")
-        
-        # 重新连接到nginx_analytics数据库
-        print("步骤3: 连接到nginx_analytics数据库...")
-        client = clickhouse_connect.get_client(
-            host=config['host'],
-            port=config['port'],
-            database='nginx_analytics',
-            username=config['username'],
-            password=config['password']
-        )
-        
-        # 创建ODS层表
-        print("步骤4: 创建ODS层表 (ods_nginx_raw)...")
-        ods_sql = """
-        CREATE TABLE IF NOT EXISTS ods_nginx_raw (
-            id UUID DEFAULT generateUUIDv4(),
-            http_host String,
-            remote_addr String,
-            log_time DateTime64(3),
-            request_method String,
-            request_uri String,
-            request_protocol String,
-            status String,
-            response_time Float64,
-            response_body_size UInt64,
-            referer String,
-            user_agent String,
-            upstream_response_time String,
-            total_request_duration Float64,
-            created_at DateTime64(3) DEFAULT now64(3),
-            file_source String
-        ) ENGINE = MergeTree()
-        ORDER BY (log_time, remote_addr)
-        """
-        client.command(ods_sql)
-        print("[OK] ODS表创建成功")
-        
-        # 创建DWD层表
-        print("步骤5: 创建DWD层表 (dwd_nginx_enriched)...")
-        dwd_sql = """
-        CREATE TABLE IF NOT EXISTS dwd_nginx_enriched (
-            id UUID,
-            http_host String,
-            remote_addr String,
-            log_time DateTime64(3),
-            request_method String,
-            request_uri String,
-            request_protocol String,
-            status String,
-            response_time Float64,
-            response_body_size UInt64,
-            referer String,
-            user_agent String,
-            upstream_response_time String,
-            total_request_duration Float64,
+        if ddl_script.exists():
+            print(f"调用DDL执行器: {ddl_script}")
+            # 导入并执行DDL脚本
+            sys.path.append(str(ddl_dir))
+            from execute_ddl import main as execute_ddl_main
             
-            -- 增强字段
-            platform String,
-            api_category String,
-            is_success UInt8,
-            is_slow_request UInt8,
-            client_ip String,
-            
-            created_at DateTime64(3),
-            file_source String
-        ) ENGINE = MergeTree()
-        ORDER BY (log_time, platform, api_category)
-        """
-        client.command(dwd_sql)
-        print("[OK] DWD表创建成功")
-        
-        # 创建ADS层表 - 热门API统计
-        print("步骤6: 创建ADS层表 (ads_top_hot_apis)...")
-        ads_sql = """
-        CREATE TABLE IF NOT EXISTS ads_top_hot_apis (
-            stat_date Date,
-            request_uri String,
-            platform String,
-            request_count UInt64,
-            success_count UInt64,
-            avg_response_time Float64,
-            total_bytes UInt64,
-            unique_visitors UInt64,
-            created_at DateTime64(3) DEFAULT now64(3)
-        ) ENGINE = MergeTree()
-        ORDER BY (stat_date, request_uri, platform)
-        """
-        client.command(ads_sql)
-        print("[OK] ADS热门API表创建成功")
-        
-        # 创建ADS层表 - 平台统计
-        print("步骤7: 创建ADS平台统计表 (ads_platform_stats)...")
-        ads_platform_sql = """
-        CREATE TABLE IF NOT EXISTS ads_platform_stats (
-            stat_date Date,
-            platform String,
-            total_requests UInt64,
-            success_requests UInt64,
-            failed_requests UInt64,
-            success_rate Float64,
-            avg_response_time Float64,
-            p95_response_time Float64,
-            total_bytes UInt64,
-            unique_visitors UInt64,
-            created_at DateTime64(3) DEFAULT now64(3)
-        ) ENGINE = MergeTree()
-        ORDER BY (stat_date, platform)
-        """
-        client.command(ads_platform_sql)
-        print("✓ ADS平台统计表创建成功")
-        
-        # 创建ADS层表 - 状态码统计
-        print("步骤8: 创建ADS状态码统计表 (ads_status_stats)...")
-        ads_status_sql = """
-        CREATE TABLE IF NOT EXISTS ads_status_stats (
-            stat_date Date,
-            status String,
-            platform String,
-            request_count UInt64,
-            percentage Float64,
-            avg_response_time Float64,
-            created_at DateTime64(3) DEFAULT now64(3)
-        ) ENGINE = MergeTree()
-        ORDER BY (stat_date, status, platform)
-        """
-        client.command(ads_status_sql)
-        print("✓ ADS状态码统计表创建成功")
-        
-        # 验证表创建
-        print("步骤9: 验证表结构...")
-        tables = client.query("SHOW TABLES").result_rows
-        table_names = [table[0] for table in tables]
-        
-        expected_tables = [
-            'ods_nginx_raw',
-            'dwd_nginx_enriched', 
-            'ads_top_hot_apis',
-            'ads_platform_stats',
-            'ads_status_stats'
-        ]
-        
-        print("已创建的表:")
-        for i, table_name in enumerate(table_names, 1):
-            print(f"  {i}. {table_name}")
-        
-        # 检查是否所有预期的表都已创建
-        missing_tables = set(expected_tables) - set(table_names)
-        if missing_tables:
-            print(f"⚠️  缺少表: {missing_tables}")
-            return False
+            success = execute_ddl_main()
+            if not success:
+                print("❌ DDL执行失败")
+                return False
         else:
-            print("✓ 所有必需的表都已成功创建")
+            print(f"❌ DDL脚本不存在: {ddl_script}")
+            print("正在回退到内置DDL...")
+            
+            # 回退到直接执行DDL
+            client = clickhouse_connect.get_client(
+                host=config['host'],
+                port=config['port'],
+                username=config['username'],
+                password=config['password']
+            )
+            
+            # 创建数据库
+            client.command('CREATE DATABASE IF NOT EXISTS nginx_analytics')
+            print("[OK] 数据库创建成功")
+            
+            # 使用简化的表创建（如果DDL文件不可用）
+            print("⚠️ 使用简化表结构，建议使用DDL文件")
+            return False
         
         print("\n" + "=" * 60)
         print("✅ 数据库初始化完成!")
@@ -212,6 +82,7 @@ def create_database_and_tables():
         print("2. Docker容器是否启动")
         print("3. 网络连接是否正常")
         print("4. 用户名密码是否正确")
+        print("5. DDL文件是否存在")
         return False
 
 def verify_database_setup():
