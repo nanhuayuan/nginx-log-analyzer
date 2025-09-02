@@ -1,0 +1,123 @@
+# =============================================================================
+# 生产级Nginx JSON日志格式 - 统一配置版
+# 基于v4版本 + 业务特殊字段，适配夜莺技术栈
+# 使用说明：app集群删除业务字段部分，self集群保留全部字段
+# =============================================================================
+
+# 统一日志格式定义
+log_format json_unified escape=json '{'
+    # 基础标识
+    '"request_id": "$request_id",'
+    '"timestamp": "$msec",'
+    '"time": "$time_iso8601",'
+    
+    # 集群标识 - 部署时替换
+    '"cluster": "CLUSTER_NAME",'
+    '"service": "SERVICE_NAME",'
+    '"node_id": "NODE_ID",'
+    '"node_ip": "$server_addr",'
+    '"zone": "ZONE_NAME",'
+    '"environment": "ENVIRONMENT",'
+    
+    # HTTP核心字段
+    '"client_ip": "$remote_addr",'
+    '"client_port": "$remote_port",'
+    '"method": "$request_method",'
+    '"uri": "$request_uri",'
+    '"path": "$uri",'
+    '"query": "$args",'
+    '"protocol": "$server_protocol",'
+    '"host": "$host",'
+    '"scheme": "$scheme",'
+    '"server_name": "$server_name",'
+    '"server_port": "$server_port",'
+    
+    # 响应核心字段
+    '"status": "$status",'
+    '"body_bytes": "$body_bytes_sent",'
+    '"total_bytes": "$bytes_sent",'
+    '"request_length": "$request_length",'
+    '"content_length": "$content_length",'
+    '"content_type": "$sent_http_content_type",'
+    
+    # 性能核心指标
+    '"request_time": "$request_time",'
+    '"upstream_connect_time": "$upstream_connect_time",'
+    '"upstream_header_time": "$upstream_header_time",'
+    '"upstream_response_time": "$upstream_response_time",'
+    '"upstream_addr": "$upstream_addr",'
+    '"upstream_status": "$upstream_status",'
+    '"upstream_cache_status": "$upstream_cache_status",'
+    
+    # 客户端信息
+    '"user_agent": "$http_user_agent",'
+    '"referer": "$http_referer",'
+    '"xff": "$http_x_forwarded_for",'
+    '"connection_id": "$connection",'
+    '"connection_requests": "$connection_requests",'
+    
+    # 通用业务扩展字段
+    '"external_request_id": "$http_x_request_id",'
+    '"trace_id": "$http_x_trace_id",'
+    '"span_id": "$http_x_span_id",'
+    '"app_key": "$http_x_app_key",'
+    '"app_version": "$http_x_app_version",'
+    '"client_type": "$http_x_client_type",'
+    
+    # 特殊业务字段 - self集群保留，app集群删除此部分
+    '"business_sign": "$http_zgtSign",'
+    '"business_timestamp": "$http_timestamp",'
+    '"business_version": "$http_version",'
+    '"business_app_key": "$http_appKey",'
+    
+    # 其他扩展字段
+    '"gzip_ratio": "$gzip_ratio",'
+    '"cookie": "$http_cookie"'
+'}';
+
+# 日志输出配置
+access_log /var/log/nginx/access.json json_unified buffer=64k flush=5s;
+error_log /var/log/nginx/error.log warn;
+
+# =============================================================================
+# 部署配置说明
+# =============================================================================
+
+# 1. 集群标识替换（所有集群都需要）
+# sed -i 's/CLUSTER_NAME/self-prod-nginx/g' nginx.conf
+# sed -i 's/SERVICE_NAME/nginx-gateway/g' nginx.conf  
+# sed -i 's/NODE_ID/self-prod-nginx-22.40/g' nginx.conf
+# sed -i 's/ZONE_NAME/main/g' nginx.conf
+# sed -i 's/ENVIRONMENT/production/g' nginx.conf
+
+# 2. app集群额外配置 - 删除业务字段
+# 删除以下4行：
+# '"business_sign": "$http_zgtSign",'
+# '"business_timestamp": "$http_timestamp",'
+# '"business_version": "$http_version",'
+# '"business_app_key": "$http_appKey",'
+# 并将最后一行cookie字段的逗号去掉
+
+# 3. 配置验证和重载
+# nginx -t && nginx -s reload
+
+# 4. 日志格式验证
+# tail -f /var/log/nginx/access.json | head -1 | jq '.'
+
+# =============================================================================
+# 监控能力支持清单
+# =============================================================================
+# ✅ 接口平均响应时长统计    - request_time
+# ✅ TOP 5 最慢接口识别     - request_time + uri 
+# ✅ TOP 5 热点接口分析     - uri + count()
+# ✅ 实时QPS排行榜         - timestamp + uri
+# ✅ 错误率监控           - status (4xx/5xx)
+# ✅ 集群级别性能对比       - cluster + request_time
+# ✅ 上游服务健康监控       - upstream_status + upstream_response_time
+# ✅ 缓存命中率分析        - upstream_cache_status
+# ✅ 客户端行为分析        - user_agent + client_ip + xff
+# ✅ 业务链路追踪         - trace_id + business_sign
+# ✅ 连接复用率分析        - connection_requests
+# ✅ 请求大小分布         - request_length + body_bytes
+# ✅ 响应压缩效率         - gzip_ratio
+# =============================================================================

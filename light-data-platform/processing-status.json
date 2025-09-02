@@ -1,0 +1,19 @@
+{
+  "2025-04-23": {
+    "status": "completed",
+    "files_processed": [
+      {
+        "process_id": "2025-04-23_access186.log_183959",
+        "file": "access186.log",
+        "full_path": "sample_nginx_logs\\2025-04-23\\access186.log",
+        "hash": "68e2a7c2b9aadb9fe72097d3b4934b60",
+        "file_size": 37156,
+        "status": "completed",
+        "start_time": "2025-08-30T18:39:59.289244",
+        "end_time": "2025-08-30T18:39:59.358152",
+        "records_count": 102,
+        "error_message": null
+      }
+    ]
+  }
+}

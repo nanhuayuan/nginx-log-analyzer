@@ -1,0 +1,212 @@
+# =============================================================================
+# Categraf最终配置 - 与ES存储方案匹配
+# 路径: /etc/categraf/conf.d/nginx_logs.toml
+# =============================================================================
+
+# 全局配置
+[global]
+hostname = "$HOSTNAME"                     # 自动获取主机名
+interval = "15s" 
+providers = ["local"]
+
+# =============================================================================
+# Nginx访问日志采集配置
+# =============================================================================
+[[inputs.tail]]
+name_override = "nginx_access"
+
+# 日志文件路径 - 根据实际路径修改
+files = [
+    "/var/log/nginx/access.json",
+    "/var/log/nginx/*/access.json"         # 支持多站点
+]
+
+# 文件监控配置
+read_from = "end"                          # 从文件末尾开始读取
+max_line_bytes = 102400                    # 最大行字节数 100KB
+fingerprint.strategy = "device_and_inode"  # 文件识别策略
+
+# JSON解析配置
+data_format = "json"
+json_time_key = "ts"                       # 时间字段
+json_time_format = "unix"                  # Unix时间戳格式
+json_string_fields = [                     # 强制字符串类型字段
+    "trace_id", 
+    "req_id", 
+    "ua", 
+    "upstream",
+    "business_sign",
+    "business_timestamp",
+    "business_version", 
+    "business_app_key"
+]
+
+# 添加标签
+[inputs.tail.tags]
+log_type = "nginx_access"
+cluster = "${CLUSTER_NAME:-unknown}"       # 环境变量，默认unknown
+service = "${SERVICE_NAME:-nginx}"
+node = "${NODE_ID:-$HOSTNAME}"
+environment = "${ENVIRONMENT:-production}"
+
+# 字段过滤器 - 只保留需要的字段
+name_prefix = ""
+fieldpass = [
+    "time_iso8601", "ts", "cluster", "service", "node", "node_ip",
+    "client_ip", "method", "uri", "host", "status", 
+    "rt", "uct", "uht", "urt", "upstream", "ups", "cache",
+    "bytes", "req_len", "trace_id", "req_id", "ua",
+    "business_sign", "business_timestamp", "business_version", "business_app_key"
+]
+
+# 数据处理器 - 字段重命名
+[[inputs.tail.processors.rename]]
+field_map = [
+    # 保持原始字段名，便于后续处理
+    ["rt", "request_time"],
+    ["uct", "upstream_connect_time"],
+    ["uht", "upstream_header_time"], 
+    ["urt", "upstream_response_time"],
+    ["ups", "upstream_status"]
+]
+
+# 数据类型转换
+[[inputs.tail.processors.converter]]
+[inputs.tail.processors.converter.fields]
+integer = ["status", "bytes", "req_len", "upstream_status"]
+float = ["request_time", "upstream_connect_time", "upstream_header_time", "upstream_response_time"]
+
+# =============================================================================
+# Nginx错误日志采集 (可选)
+# =============================================================================
+[[inputs.tail]]
+name_override = "nginx_error"
+
+files = ["/var/log/nginx/error.log"]
+data_format = "grok"
+grok_patterns = [
+    "%{TIMESTAMP_ISO8601:timestamp} \\[%{LOGLEVEL:level}\\] %{POSINT:pid}#%{NUMBER:tid}: (\\*%{NUMBER:connection_id} )?%{GREEDYDATA:message}(, client: %{IPORHOST:client_ip})?(, server: %{IPORHOST:server})?(, request: \"%{WORD:method} %{URIPATHPARAM:request} HTTP/%{NUMBER:http_version}\")?(, host: \"%{IPORHOST:host}\")?"
+]
+
+[inputs.tail.tags]
+log_type = "nginx_error"
+cluster = "${CLUSTER_NAME:-unknown}"
+service = "${SERVICE_NAME:-nginx}"
+node = "${NODE_ID:-$HOSTNAME}"
+
+# =============================================================================
+# Kafka输出配置 - 主要输出
+# =============================================================================
+[[outputs.kafka]]
+brokers = [                                # 根据实际Kafka地址修改
+    "kafka-01:9092",
+    "kafka-02:9092", 
+    "kafka-03:9092"
+]
+
+# Topic配置
+topic = "nginx-logs"                       # 修改为实际topic名
+routing_tag = "cluster"                    # 按cluster分区
+routing_key = "cluster"
+
+# 性能优化配置
+compression_codec = "snappy"               # 压缩算法
+required_acks = 1                          # 确认级别
+max_retry = 3                              # 重试次数
+max_message_bytes = 1000000                # 最大消息大小 1MB
+
+# 批量发送优化
+batch_size = 5000                          # 批次大小
+buffer_time = "5s"                         # 缓冲时间
+buffer_memory = 33554432                   # 缓冲内存 32MB
+
+# 错误处理
+drop_on_error = false                      # 出错时不丢弃数据
+retry_backoff = "100ms"                    # 重试间隔
+
+# =============================================================================
+# Prometheus指标输出 - 实时监控用
+# =============================================================================
+[[outputs.prometheus_remote_write]]
+url = "http://prometheus:9090/api/v1/write"  # 修改为实际Prometheus地址
+
+# 指标配置
+name_suffix = "_total"
+metric_version = 2
+
+# 请求头
+[outputs.prometheus_remote_write.headers]
+X-Scope-OrgID = "nginx"
+X-Prometheus-Remote-Write-Version = "0.1.0"
+
+# 过滤只输出数值指标
+namepass = ["nginx_access"]
+fieldpass = ["request_time", "bytes", "status", "upstream_status"]
+
+# =============================================================================
+# 本地备份输出 - 故障恢复用
+# =============================================================================
+[[outputs.file]]
+files = ["/var/log/categraf/nginx_backup_%Y%m%d.jsonl"]  # 按日期分文件
+data_format = "json"
+
+# 文件轮转配置
+rotation_max_size = "500MB"                # 单文件最大大小
+rotation_max_archives = 7                  # 保留文件数量
+
+# 只在Kafka输出失败时启用
+[outputs.file.when]
+condition = "kafka_error == true"
+
+# =============================================================================
+# 健康检查和监控
+# =============================================================================
+
+# Categraf自身监控
+[[inputs.internal]]
+collect_memstats = true
+
+[inputs.internal.tags]
+component = "categraf"
+cluster = "${CLUSTER_NAME:-unknown}"
+
+# 进程监控
+[[inputs.procstat]]
+pattern = "categraf"
+pid_finder = "pgrep"
+
+[inputs.procstat.tags]
+component = "categraf_process"
+
+# Nginx进程监控  
+[[inputs.procstat]]
+pattern = "nginx"
+pid_finder = "pgrep"
+
+[inputs.procstat.tags]
+component = "nginx_process"
+
+# =============================================================================
+# Agent配置
+# =============================================================================
+[agent]
+interval = "10s"                           # 采集间隔
+round_interval = true                      # 时间对齐
+metric_batch_size = 1000                   # 指标批次大小
+metric_buffer_limit = 10000                # 指标缓冲区限制
+collection_jitter = "0s"                   # 采集抖动
+flush_interval = "10s"                     # 刷新间隔
+flush_jitter = "0s"                        # 刷新抖动
+precision = ""                             # 时间精度
+debug = false                              # 调试模式
+quiet = false                              # 静默模式
+omit_hostname = false                      # 是否省略主机名
+
+# 日志配置
+logfile = "/var/log/categraf/categraf.log" # 日志文件路径
+logfile_rotation_max_size = "100MB"        # 日志轮转大小
+logfile_rotation_max_archives = 5          # 保留日志文件数
+
+# =============================================================================
+# 部署脚本
+# =============================================================================
