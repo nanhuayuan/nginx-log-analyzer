@@ -3,8 +3,8 @@
 -- ==========================================
 
 -- 1. 系统概览实时物化视图 - 从DWD到ADS自动聚合
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_system_overview_hourly
-TO ads_system_overview_hourly
+CREATE MATERIALIZED VIEW IF NOT EXISTS nginx_analytics.mv_system_overview_hourly
+TO nginx_analytics.ads_system_overview_hourly
 AS SELECT
     toStartOfHour(log_time) as stat_time,
     platform,
@@ -40,13 +40,13 @@ AS SELECT
     (countIf(request_time <= 1.5) + countIf(request_time > 1.5 AND request_time <= 6.0) * 0.5) / count() as apdex_score,
     
     now() as created_at
-FROM dwd_nginx_access_log
+FROM nginx_analytics.dwd_nginx_enriched_v2
 WHERE log_time >= now() - INTERVAL 7 DAY  -- 只处理最近7天数据，避免历史数据重复计算
 GROUP BY stat_time, platform;
 
 -- 2. API性能实时物化视图
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_api_performance_hourly  
-TO ads_api_performance_hourly
+CREATE MATERIALIZED VIEW IF NOT EXISTS nginx_analytics.mv_api_performance_hourly  
+TO nginx_analytics.ads_api_performance_hourly
 AS SELECT
     toStartOfHour(log_time) as stat_time,
     platform,
@@ -86,13 +86,13 @@ AS SELECT
     ) as health_score,
     
     now() as created_at
-FROM dwd_nginx_access_log  
+FROM nginx_analytics.dwd_nginx_enriched_v2  
 WHERE log_time >= now() - INTERVAL 7 DAY
 GROUP BY stat_time, platform, api_category, api_path, api_module;
 
 -- 3. 异常检测实时物化视图 - 基于统计学异常检测
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_anomaly_detection_realtime
-TO ads_anomaly_detection_realtime  
+CREATE MATERIALIZED VIEW IF NOT EXISTS nginx_analytics.mv_anomaly_detection_realtime
+TO nginx_analytics.ads_anomaly_detection_realtime  
 AS SELECT
     now() as detect_time,
     
@@ -160,7 +160,7 @@ FROM (
                     avg(request_time), 
                     count() / 300.0
                 ) as value
-            FROM dwd_nginx_access_log 
+            FROM nginx_analytics.dwd_nginx_enriched_v2 
             WHERE log_time BETWEEN now() - INTERVAL 7 DAY AND now() - INTERVAL 1 HOUR
                 AND platform = outer.platform 
                 AND request_path = outer.api_path
@@ -171,7 +171,7 @@ FROM (
         -- 历史对比指标  
         (SELECT avg(error_rate) FROM (
             SELECT countIf(is_error) * 100.0 / count() as error_rate
-            FROM dwd_nginx_access_log
+            FROM nginx_analytics.dwd_nginx_enriched_v2
             WHERE log_time BETWEEN now() - INTERVAL 7 DAY AND now() - INTERVAL 1 HOUR  
                 AND platform = outer.platform
                 AND request_path = outer.api_path
@@ -180,7 +180,7 @@ FROM (
         
         (SELECT avg(avg_time) FROM (
             SELECT avg(request_time) as avg_time  
-            FROM dwd_nginx_access_log
+            FROM nginx_analytics.dwd_nginx_enriched_v2
             WHERE log_time BETWEEN now() - INTERVAL 7 DAY AND now() - INTERVAL 1 HOUR
                 AND platform = outer.platform
                 AND request_path = outer.api_path  
@@ -189,14 +189,14 @@ FROM (
         
         (SELECT avg(req_count) FROM (
             SELECT count() as req_count
-            FROM dwd_nginx_access_log 
+            FROM nginx_analytics.dwd_nginx_enriched_v2 
             WHERE log_time BETWEEN now() - INTERVAL 7 DAY AND now() - INTERVAL 1 HOUR
                 AND platform = outer.platform
                 AND request_path = outer.api_path
             GROUP BY toDate(log_time), toHour(log_time)
         )) as historical_request_count
         
-    FROM dwd_nginx_access_log outer
+    FROM nginx_analytics.dwd_nginx_enriched_v2 outer
     WHERE log_time >= now() - INTERVAL 5 MINUTE  -- 最近5分钟的数据
     GROUP BY platform, request_path
 ) 
@@ -209,8 +209,8 @@ WHERE
     AND request_count >= 10;  -- 最少10个请求才有统计意义
 
 -- 4. 平台对比实时物化视图
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_platform_comparison_hourly
-TO ads_platform_comparison_hourly
+CREATE MATERIALIZED VIEW IF NOT EXISTS nginx_analytics.mv_platform_comparison_hourly
+TO nginx_analytics.ads_platform_comparison_hourly
 AS SELECT
     toStartOfHour(log_time) as stat_time,
     platform,
@@ -224,13 +224,13 @@ AS SELECT
     (countIf(request_time <= 2.0) + countIf(request_time > 2.0 AND request_time <= 8.0) * 0.5) / count() * 100 as user_satisfaction,
     
     -- 市场份额 (该平台请求占总请求的比例)
-    count() * 100.0 / (SELECT count() FROM dwd_nginx_access_log WHERE log_time = outer.log_time) as market_share,
+    count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v2 WHERE log_time = outer.log_time) as market_share,
     
     -- 增长率 (与上周同期对比)
-    (count() - (SELECT count() FROM dwd_nginx_access_log 
+    (count() - (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v2 
                 WHERE toStartOfHour(log_time) = toStartOfHour(outer.log_time) - INTERVAL 7 DAY
                 AND platform = outer.platform)) * 100.0 / 
-    greatest(1, (SELECT count() FROM dwd_nginx_access_log 
+    greatest(1, (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v2 
                  WHERE toStartOfHour(log_time) = toStartOfHour(outer.log_time) - INTERVAL 7 DAY
                  AND platform = outer.platform)) as growth_rate,
                  
@@ -239,12 +239,12 @@ AS SELECT
     
     now() as created_at
     
-FROM dwd_nginx_access_log outer
+FROM nginx_analytics.dwd_nginx_enriched_v2 outer
 WHERE log_time >= now() - INTERVAL 7 DAY
 GROUP BY stat_time, platform;
 
 -- 5. 实时性能监控视图 (1分钟级别)
-CREATE VIEW IF NOT EXISTS view_realtime_performance
+CREATE VIEW IF NOT EXISTS nginx_analytics.view_realtime_performance
 AS SELECT
     toStartOfMinute(log_time) as minute,
     platform,
@@ -255,13 +255,13 @@ AS SELECT
     countIf(is_slow) as slow_count,
     uniq(client_ip) as unique_ips,
     countIf(is_success) * 100.0 / count() as success_rate
-FROM dwd_nginx_access_log
+FROM nginx_analytics.dwd_nginx_enriched_v2
 WHERE log_time >= now() - INTERVAL 1 HOUR  -- 只看最近1小时实时数据
 GROUP BY minute, platform, api_category
 ORDER BY minute DESC, requests_per_minute DESC;
 
 -- 6. TOP排行榜视图 (实时热点分析)  
-CREATE VIEW IF NOT EXISTS view_top_apis_realtime
+CREATE VIEW IF NOT EXISTS nginx_analytics.view_top_apis_realtime
 AS SELECT
     platform,
     request_path as api_path,
@@ -272,14 +272,10 @@ AS SELECT
     uniq(client_ip) as unique_visitors,
     row_number() OVER (PARTITION BY platform ORDER BY count() DESC) as rank_by_requests,
     row_number() OVER (PARTITION BY platform ORDER BY avg(request_time) DESC) as rank_by_slowness
-FROM dwd_nginx_access_log
+FROM nginx_analytics.dwd_nginx_enriched_v2
 WHERE log_time >= now() - INTERVAL 15 MINUTE  -- 最近15分钟热点
 GROUP BY platform, api_path
 HAVING request_count >= 5  -- 至少5次请求
 ORDER BY platform, request_count DESC;
 
-COMMENT ON VIEW mv_system_overview_hourly IS '系统概览物化视图-小时级聚合，自动从DWD层实时计算';
-COMMENT ON VIEW mv_api_performance_hourly IS 'API性能物化视图-包含健康度评分和业务价值权重';
-COMMENT ON VIEW mv_anomaly_detection_realtime IS '异常检测物化视图-基于统计学方法实时识别异常';
-COMMENT ON VIEW view_realtime_performance IS '实时性能监控视图-1分钟级别，用于实时大屏展示';
-COMMENT ON VIEW view_top_apis_realtime IS 'TOP排行榜视图-热点API实时识别';
+-- 视图注释：mv_system_overview_hourly 系统概览物化视图-小时级聚合，自动从DWD层实时计算-- 视图注释：mv_api_performance_hourly API性能物化视图-包含健康度评分和业务价值权重-- 视图注释：mv_anomaly_detection_realtime 异常检测物化视图-基于统计学方法实时识别异常-- 视图注释：view_realtime_performance 实时性能监控视图-1分钟级别，用于实时大屏展示-- 视图注释：view_top_apis_realtime TOP排行榜视图-热点API实时识别';

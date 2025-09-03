@@ -4,7 +4,7 @@
 -- ==========================================
 
 -- 1. 对应 01.接口性能分析.xlsx
-CREATE TABLE IF NOT EXISTS ads_api_performance_analysis (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_api_performance_analysis (
     stat_time DateTime,                              -- 统计时间
     time_granularity LowCardinality(String),         -- hour/day/week
     platform LowCardinality(String),                 -- 平台维度
@@ -55,7 +55,7 @@ ORDER BY (stat_time, platform, api_module, api_path)
 TTL stat_time + INTERVAL 2 YEAR;
 
 -- 2. 对应 02.服务层级分析.xlsx  
-CREATE TABLE IF NOT EXISTS ads_service_level_analysis (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_service_level_analysis (
     stat_time DateTime,
     time_granularity LowCardinality(String),
     platform LowCardinality(String),
@@ -92,7 +92,7 @@ ORDER BY (stat_time, platform, service_name, cluster_node)
 TTL stat_time + INTERVAL 2 YEAR;
 
 -- 3. 对应 03_慢请求分析.xlsx
-CREATE TABLE IF NOT EXISTS ads_slow_request_analysis (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_slow_request_analysis (
     stat_time DateTime,                              -- 统计时间
     time_granularity LowCardinality(String),         -- hour/day/week
     platform LowCardinality(String),                 -- 平台维度
@@ -134,7 +134,7 @@ ORDER BY (stat_time, platform, slow_rate, api_path)
 TTL stat_time + INTERVAL 1 YEAR;
 
 -- 4. 对应 04.状态码统计.xlsx
-CREATE TABLE IF NOT EXISTS ads_status_code_analysis (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_status_code_analysis (
     stat_time DateTime,                              -- 统计时间
     time_granularity LowCardinality(String),         -- hour/day/week
     platform LowCardinality(String),                 -- 平台维度
@@ -165,7 +165,7 @@ ORDER BY (stat_time, platform, status_code, request_count)
 TTL stat_time + INTERVAL 1 YEAR;
 
 -- 5. 对应 05.时间维度分析-全部接口.xlsx 和 05_01指定接口
-CREATE TABLE IF NOT EXISTS ads_time_dimension_analysis (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_time_dimension_analysis (
     stat_time DateTime,
     time_granularity LowCardinality(String),         -- minute/hour/day
     platform LowCardinality(String),
@@ -205,7 +205,7 @@ ORDER BY (stat_time, platform, api_category, api_path)
 TTL stat_time + INTERVAL 2 YEAR;
 
 -- 6. 对应 06_服务稳定性.xlsx
-CREATE TABLE IF NOT EXISTS ads_service_stability_analysis (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_service_stability_analysis (
     stat_time DateTime,
     time_granularity LowCardinality(String),
     platform LowCardinality(String),
@@ -244,7 +244,7 @@ ORDER BY (stat_time, platform, stability_score, service_name)
 TTL stat_time + INTERVAL 2 YEAR;
 
 -- 7. 对应 08_IP来源分析.xlsx
-CREATE TABLE IF NOT EXISTS ads_ip_source_analysis (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_ip_source_analysis (
     stat_time DateTime,
     time_granularity LowCardinality(String),
     platform LowCardinality(String),
@@ -287,7 +287,7 @@ ORDER BY (stat_time, platform, risk_score, client_ip)
 TTL stat_time + INTERVAL 6 MONTH;
 
 -- 8. 对应 10_请求头分析.xlsx
-CREATE TABLE IF NOT EXISTS ads_request_header_analysis (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_request_header_analysis (
     stat_time DateTime,
     time_granularity LowCardinality(String),
     platform LowCardinality(String),
@@ -331,7 +331,7 @@ ORDER BY (stat_time, platform, browser_name, os_name)
 TTL stat_time + INTERVAL 1 YEAR;
 
 -- 9. 对应 11_请求头性能关联分析.xlsx
-CREATE TABLE IF NOT EXISTS ads_header_performance_correlation (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_header_performance_correlation (
     stat_time DateTime,
     time_granularity LowCardinality(String),
     platform LowCardinality(String),
@@ -374,7 +374,7 @@ ORDER BY (stat_time, platform, performance_score, header_combination)
 TTL stat_time + INTERVAL 1 YEAR;
 
 -- 10. 对应 12_综合报告.xlsx - 执行摘要
-CREATE TABLE IF NOT EXISTS ads_comprehensive_report (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_comprehensive_report (
     report_time DateTime,
     time_period LowCardinality(String),              -- hourly/daily/weekly/monthly
     platform LowCardinality(String),
@@ -431,7 +431,7 @@ ORDER BY (report_time, time_period, platform)
 TTL report_time + INTERVAL 2 YEAR;
 
 -- 11. 对应 13_接口错误分析.xlsx
-CREATE TABLE IF NOT EXISTS ads_api_error_analysis (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_api_error_analysis (
     stat_time DateTime,                              -- 统计时间
     time_granularity LowCardinality(String),         -- hour/day/week
     platform LowCardinality(String),                 -- 平台维度
@@ -473,14 +473,14 @@ PARTITION BY toYYYYMM(stat_time)
 ORDER BY (stat_time, platform, error_rate, api_path)
 TTL stat_time + INTERVAL 1 YEAR;
 
-COMMENT ON TABLE ads_api_performance_analysis IS '01.接口性能分析 - 支持任意时间段、多平台维度分析';
-COMMENT ON TABLE ads_service_level_analysis IS '02.服务层级分析 - 服务健康度和性能监控';
-COMMENT ON TABLE ads_slow_request_analysis IS '03.慢请求分析 - 慢请求识别和优化建议';
-COMMENT ON TABLE ads_status_code_analysis IS '04.状态码统计 - HTTP状态码分布和异常检测';  
-COMMENT ON TABLE ads_time_dimension_analysis IS '05.时间维度分析 - 全部和指定接口的时间趋势';
-COMMENT ON TABLE ads_service_stability_analysis IS '06.服务稳定性分析 - SLA和MTTR监控';
-COMMENT ON TABLE ads_ip_source_analysis IS '08.IP来源分析 - 地理分布和安全风险评估';
-COMMENT ON TABLE ads_request_header_analysis IS '10.请求头分析 - User-Agent和Referer解析';
-COMMENT ON TABLE ads_header_performance_correlation IS '11.请求头性能关联分析 - 头部与性能关系';
-COMMENT ON TABLE ads_comprehensive_report IS '12.综合报告 - 执行摘要和整体健康度';
-COMMENT ON TABLE ads_api_error_analysis IS '13.接口错误分析 - 错误模式和根因分析';
+-- 表注释：api_performance_analysis 01.接口性能分析 - 支持任意时间段、多平台维度分析
+-- 表注释：service_level_analysis 02.服务层级分析 - 服务健康度和性能监控
+-- 表注释：slow_request_analysis 03.慢请求分析 - 慢请求识别和优化建议
+-- 表注释：status_code_analysis 04.状态码统计 - HTTP状态码分布和异常检测  
+-- 表注释：time_dimension_analysis 05.时间维度分析 - 全部和指定接口的时间趋势
+-- 表注释：service_stability_analysis 06.服务稳定性分析 - SLA和MTTR监控
+-- 表注释：ip_source_analysis 08.IP来源分析 - 地理分布和安全风险评估
+-- 表注释：request_header_analysis 10.请求头分析 - User-Agent和Referer解析
+-- 表注释：header_performance_correlation 11.请求头性能关联分析 - 头部与性能关系
+-- 表注释：comprehensive_report 12.综合报告 - 执行摘要和整体健康度
+-- 表注释：api_error_analysis 13.接口错误分析 - 错误模式和根因分析

@@ -82,42 +82,28 @@ def process_logs(date_str, force=False):
     """处理nginx日志"""
     print(f"开始处理 {date_str} 的nginx日志")
     
-    # 检查日志目录
-    log_dir = Path(f"D:/project/nginx-log-analyzer/nginx-analytics-warehouse/nginx_logs/{date_str}")
-    if not log_dir.exists():
-        print(f"[ERROR] 日志目录不存在: {log_dir}")
-        print("请确保日志文件放在正确的目录结构中")
-        return False
-    
-    log_files = list(log_dir.glob("*.log"))
-    if not log_files:
-        print(f"[ERROR] 在 {log_dir} 中未找到 .log 文件")
-        return False
-    
-    print(f"找到 {len(log_files)} 个日志文件: {[f.name for f in log_files]}")
-    
-    # 调用核心处理器
+    # 使用新的模块化处理器
     try:
-        from nginx_processor_complete import NginxProcessorComplete
-        processor = NginxProcessorComplete()
+        from nginx_processor_modular import NginxProcessorModular
+        processor = NginxProcessorModular()
         
         # 处理日志
-        if force:
-            result = processor.process_specific_date(date_str, force_reprocess=True)
-        else:
-            result = processor.process_specific_date(date_str, force_reprocess=False)
+        result = processor.process_specific_date(date_str, force_reprocess=force)
         
         if result['success']:
             print("[SUCCESS] 日志处理完成")
-            print(f"   ODS记录: {result.get('ods_count', 0)}")
-            print(f"   DWD记录: {result.get('dwd_count', 0)}")
+            print(f"   处理文件: {result.get('processed_files', 0)}")
+            print(f"   总记录数: {result.get('total_records', 0):,}")
             print(f"   处理时间: {result.get('duration', 0):.2f}秒")
         else:
             print(f"[ERROR] 日志处理失败: {result.get('error', '未知错误')}")
+            if result.get('errors'):
+                for error in result['errors']:
+                    print(f"   详细错误: {error}")
             return False
             
-    except ImportError:
-        print("[ERROR] 找不到nginx_processor_simple模块")
+    except ImportError as e:
+        print(f"[ERROR] 找不到模块化处理器: {e}")
         return False
     except Exception as e:
         print(f"[ERROR] 处理过程中发生错误: {e}")
@@ -131,10 +117,11 @@ def show_status():
     print("-" * 50)
     
     try:
-        from show_data_flow import main as show_data_flow_main
-        show_data_flow_main()
-    except ImportError:
-        print("[ERROR] 找不到状态检查模块")
+        from nginx_processor_modular import NginxProcessorModular
+        processor = NginxProcessorModular()
+        processor.show_status()
+    except ImportError as e:
+        print(f"[ERROR] 找不到模块化处理器: {e}")
     except Exception as e:
         print(f"[ERROR] 状态检查失败: {e}")
 
@@ -148,8 +135,8 @@ def clear_all_data():
         return
     
     try:
-        from nginx_processor_complete import NginxProcessorComplete
-        processor = NginxProcessorComplete()
+        from nginx_processor_modular import NginxProcessorModular
+        processor = NginxProcessorModular()
         processor.clear_all_data()
         print("[SUCCESS] 所有数据已清空")
     except Exception as e:
@@ -184,21 +171,22 @@ def process_all_unprocessed():
     print("处理所有未处理的日志")
     
     try:
-        from nginx_processor_complete import NginxProcessorComplete
-        processor = NginxProcessorComplete()
+        from nginx_processor_modular import NginxProcessorModular
+        processor = NginxProcessorModular()
         result = processor.process_all_unprocessed_logs()
         
         if result['success']:
             print("[SUCCESS] 日志处理完成")
-            print(f"   新处理文件: {result.get('processed_files', 0)}")
-            print(f"   跳过文件: {result.get('skipped_files', 0)}")
-            print(f"   ODS记录: {result.get('ods_count', 0)}")
-            print(f"   DWD记录: {result.get('dwd_count', 0)}")
+            print(f"   处理日期: {result.get('processed_dates', 0)} 个")
+            print(f"   总记录数: {result.get('total_records', 0):,} 条")
             print(f"   处理时间: {result.get('duration', 0):.2f}秒")
         else:
             print(f"[ERROR] 处理失败: {result.get('error', '未知错误')}")
-    except ImportError:
-        print("[ERROR] 找不到处理器模块")
+            if result.get('errors'):
+                for error in result['errors'][:5]:  # 只显示前5个错误
+                    print(f"   详细错误: {error}")
+    except ImportError as e:
+        print(f"[ERROR] 找不到模块化处理器: {e}")
     except Exception as e:
         print(f"[ERROR] 处理失败: {e}")
 
@@ -277,6 +265,100 @@ def stop_services():
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] 停止服务失败: {e}")
 
+def interactive_menu():
+    """交互式菜单"""
+    while True:
+        print("\n" + "=" * 60)
+        print("🏛️   Nginx日志分析数据仓库 - 统一管理入口")
+        print("=" * 60)
+        print("1. 处理所有未处理的日志 (推荐)")
+        print("2. 处理指定日期的日志")
+        print("3. 查看系统状态")
+        print("4. 清空所有数据 (仅开发环境)")
+        print("5. 运行演示数据流")
+        print("6. 验证数据处理质量") 
+        print("7. 启动ClickHouse等服务")
+        print("8. 停止服务")
+        print("0. 退出")
+        print("-" * 60)
+        
+        try:
+            choice = input("请选择操作 [0-8]: ").strip()
+            
+            if choice == '0':
+                print("👋 再见！")
+                break
+            
+            elif choice == '1':
+                print("\n🔄 开始处理所有未处理的日志...")
+                process_all_unprocessed()
+                input("\n按回车键继续...")
+            
+            elif choice == '2':
+                date_str = input("\n请输入日期 (YYYYMMDD格式，如: 20250422): ").strip()
+                if not date_str or len(date_str) != 8 or not date_str.isdigit():
+                    print("❌ 日期格式错误，请使用YYYYMMDD格式")
+                    input("按回车键继续...")
+                    continue
+                
+                try:
+                    datetime.strptime(date_str, '%Y%m%d')
+                except ValueError:
+                    print("❌ 无效的日期")
+                    input("按回车键继续...")
+                    continue
+                
+                force = input("是否强制重新处理？(y/N): ").strip().lower() == 'y'
+                
+                print(f"\n🔄 开始处理 {date_str} 的日志...")
+                success = process_logs(date_str, force)
+                if success:
+                    print(f"\n日志处理完成！现在可以访问BI工具进行分析:")
+                    print(f"   Grafana: http://localhost:3000")
+                    print(f"   Superset: http://localhost:8088")
+                input("\n按回车键继续...")
+            
+            elif choice == '3':
+                print()
+                show_status()
+                input("\n按回车键继续...")
+            
+            elif choice == '4':
+                print("\n⚠️  清空所有数据 (仅开发环境使用)")
+                clear_all_data()
+                input("\n按回车键继续...")
+            
+            elif choice == '5':
+                print("\n🔄 运行演示数据流...")
+                run_demo()
+                input("\n按回车键继续...")
+            
+            elif choice == '6':
+                print("\n🔄 验证数据处理质量...")
+                validate_data()
+                input("\n按回车键继续...")
+            
+            elif choice == '7':
+                print("\n🔄 启动ClickHouse等服务...")
+                start_services()
+                input("\n按回车键继续...")
+            
+            elif choice == '8':
+                print("\n🔄 停止服务...")
+                stop_services()
+                input("\n按回车键继续...")
+            
+            else:
+                print("❌ 无效选择，请输入 0-8")
+                input("按回车键继续...")
+                
+        except KeyboardInterrupt:
+            print("\n\n👋 用户中断，再见！")
+            break
+        except Exception as e:
+            print(f"\n❌ 操作过程中发生错误: {e}")
+            input("按回车键继续...")
+
 def main():
     """主函数"""
     print_banner()
@@ -286,8 +368,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
+  python main_simple.py                             # 交互式菜单 (推荐)
   python main_simple.py process --date 20250901     # 处理指定日期日志
   python main_simple.py process --date 20250901 --force  # 强制重新处理
+  python main_simple.py process-all                 # 处理所有未处理日志 
   python main_simple.py status                      # 查看系统状态
   python main_simple.py clear-all                   # 清空所有数据
   python main_simple.py demo                        # 运行演示
@@ -314,8 +398,9 @@ def main():
     
     args = parser.parse_args()
     
+    # 如果没有参数，显示交互式菜单
     if not args.command:
-        show_usage()
+        interactive_menu()
         return
     
     # 对于需要服务的命令，检查前置条件

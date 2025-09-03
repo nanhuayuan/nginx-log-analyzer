@@ -100,7 +100,11 @@ def main():
             
             # 按顺序执行DDL文件
             ddl_files = [
-                'init_tables.sql'
+                #'init_tables.sql'
+                '01_ods_layer_real.sql',
+                '02_dwd_layer_real.sql',
+                '03_ads_layer_real.sql',
+                '04_materialized_views.sql',
             ]
             
             success_count = 0
