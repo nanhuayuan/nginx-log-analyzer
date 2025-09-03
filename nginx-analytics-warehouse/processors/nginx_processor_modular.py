@@ -22,6 +22,7 @@ from log_parser import NginxLogParser
 from data_processor import DataProcessor  
 from database_writer import DatabaseWriter
 from materialized_view_manager import MaterializedViewManager
+from data_cleaner import DataCleaner
 
 class NginxProcessorModular:
     """模块化Nginx日志处理器主控制器"""
@@ -37,6 +38,8 @@ class NginxProcessorModular:
         self.database_writer = DatabaseWriter(host='localhost', port=8123,
                  database='nginx_analytics', user='analytics_user', password='analytics_password')
         self.mv_manager = MaterializedViewManager(host='localhost', port=8123,
+                 database='nginx_analytics', user='analytics_user', password='analytics_password')
+        self.data_cleaner = DataCleaner(host='localhost', port=8123,
                  database='nginx_analytics', user='analytics_user', password='analytics_password')
         
         # 日志配置
@@ -446,7 +449,7 @@ class NginxProcessorModular:
             print("2. 处理指定日期的日志")
             print("3. 查看系统状态")
             print("4. 物化视图管理")
-            print("5. 清空所有数据 (仅开发环境)")
+            print("5. 数据清理管理")
             print("6. 强制重新处理所有日志")
             print("0. 退出")
             print("-" * 60)
@@ -496,17 +499,8 @@ class NginxProcessorModular:
                     input("\n按回车键继续...")
                 
                 elif choice == '5':
-                    print("\n⚠️  清空所有数据 (仅开发环境使用)")
-                    confirm = input("确认清空所有数据？这将删除数据库中的所有日志数据 (y/N): ").strip().lower()
-                    if confirm == 'y':
-                        second_confirm = input("再次确认！这将不可恢复地删除所有数据 (输入 'DELETE' 确认): ").strip()
-                        if second_confirm == 'DELETE':
-                            print("\n🔄 开始清空数据...")
-                            self.clear_all_data()
-                        else:
-                            print("❌ 确认失败，操作已取消")
-                    else:
-                        print("❌ 操作已取消")
+                    print("\n🧹 数据清理管理")
+                    self.data_cleaning_menu()
                     input("\n按回车键继续...")
                 
                 elif choice == '6':
@@ -572,74 +566,6 @@ class NginxProcessorModular:
                 print("   详细错误:")
                 for i, error in enumerate(errors, 1):
                     print(f"     {i}. {error}")
-
-def main():
-    """主函数"""
-    parser = argparse.ArgumentParser(
-        description='模块化Nginx日志处理器',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-使用示例:
-  python nginx_processor_modular.py                             # 交互式菜单 (推荐)
-  python nginx_processor_modular.py process --date 20250422     # 处理指定日期
-  python nginx_processor_modular.py process --date 20250422 --force  # 强制重新处理
-  python nginx_processor_modular.py process-all                 # 处理所有未处理日志
-  python nginx_processor_modular.py status                      # 查看系统状态
-  python nginx_processor_modular.py clear-all                   # 清空所有数据
-        """
-    )
-    
-    subparsers = parser.add_subparsers(dest='command', help='可用命令')
-    
-    # process命令
-    process_parser = subparsers.add_parser('process', help='处理指定日期的日志')
-    process_parser.add_argument('--date', required=True, help='日期 (YYYYMMDD格式)')
-    process_parser.add_argument('--force', action='store_true', help='强制重新处理')
-    
-    # 其他命令
-    subparsers.add_parser('process-all', help='处理所有未处理的日志')
-    subparsers.add_parser('status', help='查看系统状态')
-    subparsers.add_parser('clear-all', help='清空所有数据 (开发环境使用)')
-    
-    args = parser.parse_args()
-    
-    # 初始化处理器
-    processor = NginxProcessorModular()
-    
-    # 如果没有参数，显示交互式菜单
-    if not args.command:
-        processor.interactive_menu()
-        return
-    
-    # 执行对应命令
-    if args.command == 'process':
-        # 验证日期格式
-        try:
-            datetime.strptime(args.date, '%Y%m%d')
-        except ValueError:
-            print("❌ 日期格式错误，请使用YYYYMMDD格式，例如: 20250422")
-            return
-        
-        result = processor.process_specific_date(args.date, args.force)
-        processor._print_single_date_result(result)
-    
-    elif args.command == 'process-all':
-        result = processor.process_all_unprocessed_logs()
-        processor._print_process_result(result, "批量处理")
-    
-    elif args.command == 'status':
-        processor.show_status()
-    
-    elif args.command == 'clear-all':
-        confirm = input("⚠️  确认清空所有数据？这将删除数据库中的所有日志数据 (y/N): ")
-        if confirm.lower() == 'y':
-            second_confirm = input("再次确认！这将不可恢复地删除所有数据 (输入 'DELETE' 确认): ").strip()
-            if second_confirm == 'DELETE':
-                processor.clear_all_data()
-            else:
-                print("❌ 确认失败，操作已取消")
-        else:
-            print("❌ 操作已取消")
     
     def materialized_view_menu(self):
         """物化视图管理菜单"""
@@ -721,6 +647,294 @@ def main():
             except Exception as e:
                 print(f"❌ 操作失败: {str(e)}")
                 input("按回车键继续...")
+    
+    def data_cleaning_menu(self):
+        """数据清理管理菜单"""
+        if not self.data_cleaner.connect():
+            print("❌ 无法连接到ClickHouse，请检查服务状态")
+            return
+        
+        while True:
+            print("\n" + "-" * 60)
+            print("🧹 数据清理管理")
+            print("-" * 60)
+            print("1. 查看表信息统计")
+            print("2. 清空源数据 (ODS + DWD) - 保留ADS聚合")
+            print("3. 清空所有数据 (ODS + DWD + ADS) - 完全清空")
+            print("4. 仅清空ADS聚合数据 - 重新生成聚合")
+            print("5. 按日期范围清空")
+            print("6. 自定义表清空")
+            print("0. 返回主菜单")
+            print("-" * 60)
+            
+            try:
+                choice = input("请选择操作 [0-6]: ").strip()
+                
+                if choice == '0':
+                    break
+                
+                elif choice == '1':
+                    print("\n📊 数据仓库表信息统计:")
+                    self.data_cleaner.print_table_info()
+                
+                elif choice == '2':
+                    print("\n⚠️  清空源数据 (ODS + DWD)")
+                    print("这将删除原始日志和清洗后的明细数据，但保留ADS聚合分析数据")
+                    confirm = input("确认执行？(y/N): ").strip().lower()
+                    if confirm == 'y':
+                        second_confirm = input("再次确认！输入 'CONFIRMED' 确认删除: ").strip()
+                        if second_confirm == 'CONFIRMED':
+                            print("\n🔄 开始清空源数据...")
+                            results = self.data_cleaner.clear_by_layers(['ODS', 'DWD'], confirm_token='CONFIRMED')
+                            self._print_cleaning_results(results)
+                        else:
+                            print("❌ 确认失败，操作已取消")
+                    else:
+                        print("❌ 操作已取消")
+                
+                elif choice == '3':
+                    print("\n⚠️  清空所有数据 (ODS + DWD + ADS)")
+                    print("这将删除数据仓库中的全部数据，包括原始日志、明细数据和聚合分析数据")
+                    confirm = input("确认执行？(y/N): ").strip().lower()
+                    if confirm == 'y':
+                        second_confirm = input("最终确认！输入 'DELETE_ALL' 确认删除所有数据: ").strip()
+                        if second_confirm == 'DELETE_ALL':
+                            print("\n🔄 开始清空所有数据...")
+                            results = self.data_cleaner.clear_by_layers(['ODS', 'DWD', 'ADS'], confirm_token='CONFIRMED')
+                            self._print_cleaning_results(results)
+                        else:
+                            print("❌ 确认失败，操作已取消")
+                    else:
+                        print("❌ 操作已取消")
+                
+                elif choice == '4':
+                    print("\n⚠️  仅清空ADS聚合数据")
+                    print("这将删除所有分析报表数据，但保留原始日志数据")
+                    print("清空后，物化视图会自动重新生成ADS数据")
+                    confirm = input("确认执行？(y/N): ").strip().lower()
+                    if confirm == 'y':
+                        second_confirm = input("再次确认！输入 'CONFIRMED' 确认删除: ").strip()
+                        if second_confirm == 'CONFIRMED':
+                            print("\n🔄 开始清空ADS数据...")
+                            results = self.data_cleaner.clear_by_layers(['ADS'], confirm_token='CONFIRMED')
+                            self._print_cleaning_results(results)
+                        else:
+                            print("❌ 确认失败，操作已取消")
+                    else:
+                        print("❌ 操作已取消")
+                
+                elif choice == '5':
+                    print("\n📅 按日期范围清空")
+                    start_date = input("请输入开始日期 (YYYY-MM-DD): ").strip()
+                    end_date = input("请输入结束日期 (YYYY-MM-DD): ").strip()
+                    
+                    if not start_date or not end_date:
+                        print("❌ 日期不能为空")
+                        continue
+                    
+                    print(f"⚠️  将删除 {start_date} 至 {end_date} 期间的所有数据")
+                    confirm = input("确认执行？(y/N): ").strip().lower()
+                    if confirm == 'y':
+                        second_confirm = input("再次确认！输入 'CONFIRMED' 确认删除: ").strip()
+                        if second_confirm == 'CONFIRMED':
+                            print(f"\n🔄 开始按日期清空 {start_date} ~ {end_date}...")
+                            results = self.data_cleaner.clear_by_date_range(start_date, end_date, confirm_token='CONFIRMED')
+                            self._print_cleaning_results(results)
+                        else:
+                            print("❌ 确认失败，操作已取消")
+                    else:
+                        print("❌ 操作已取消")
+                
+                elif choice == '6':
+                    print("\n🎯 自定义表清空")
+                    
+                    # 获取表信息
+                    table_info = self.data_cleaner.get_table_info()
+                    all_tables = []
+                    
+                    print("📋 当前数据库表:")
+                    for layer_name, layer_stats in table_info['layers'].items():
+                        print(f"\n{layer_name} 层:")
+                        for table in layer_stats['tables']:
+                            table_name = table['name']
+                            records = table['records']
+                            all_tables.append(table_name)
+                            print(f"  {len(all_tables)}. {table_name} ({records:,} 条)")
+                    
+                    if not all_tables:
+                        print("❌ 没有找到可清理的表")
+                        continue
+                    
+                    # 用户选择表
+                    try:
+                        selections = input(f"\n请输入要清理的表序号 (1-{len(all_tables)})，多个用逗号分隔: ").strip()
+                        if not selections:
+                            print("❌ 未选择任何表")
+                            continue
+                        
+                        indices = [int(x.strip()) - 1 for x in selections.split(',')]
+                        selected_tables = [all_tables[i] for i in indices if 0 <= i < len(all_tables)]
+                        
+                        if not selected_tables:
+                            print("❌ 无效的表选择")
+                            continue
+                        
+                        print(f"⚠️  将清空以下表: {', '.join(selected_tables)}")
+                        confirm = input("确认执行？(y/N): ").strip().lower()
+                        if confirm == 'y':
+                            second_confirm = input("再次确认！输入 'CONFIRMED' 确认删除: ").strip()
+                            if second_confirm == 'CONFIRMED':
+                                print(f"\n🔄 开始清空选定的 {len(selected_tables)} 个表...")
+                                results = self.data_cleaner.clear_specific_tables(selected_tables, confirm_token='CONFIRMED')
+                                self._print_cleaning_results(results)
+                            else:
+                                print("❌ 确认失败，操作已取消")
+                        else:
+                            print("❌ 操作已取消")
+                            
+                    except (ValueError, IndexError):
+                        print("❌ 无效的序号格式")
+                
+                else:
+                    print("❌ 无效选择，请输入 0-6")
+                
+                input("\n按回车键继续...")
+                
+            except KeyboardInterrupt:
+                print("\n返回主菜单...")
+                break
+            except Exception as e:
+                print(f"❌ 操作失败: {str(e)}")
+                input("按回车键继续...")
+    
+    def _print_cleaning_results(self, results: Dict[str, Any]):
+        """打印清理结果"""
+        if not results.get('success'):
+            print(f"❌ 清理失败: {results.get('error', '未知错误')}")
+            return
+        
+        print(f"\n🎉 清理完成!")
+        
+        # 按层级显示结果
+        if 'layers_processed' in results:
+            for layer_result in results['layers_processed']:
+                layer_name = layer_result['layer']
+                description = layer_result['description']
+                records_deleted = layer_result['records_deleted']
+                
+                print(f"\n📊 {layer_name} 层 - {description}")
+                print(f"   删除记录: {records_deleted:,} 条")
+                
+                for table_result in layer_result['tables']:
+                    if table_result.get('success'):
+                        table = table_result['table']
+                        deleted = table_result['records_deleted']
+                        duration = table_result.get('duration', 0)
+                        print(f"     ✅ {table}: {deleted:,} 条 ({duration:.2f}s)")
+                    else:
+                        table = table_result['table']
+                        error = table_result.get('error', '未知错误')
+                        print(f"     ❌ {table}: 失败 ({error})")
+        
+        # 按表显示结果
+        elif 'tables_processed' in results:
+            for table_result in results['tables_processed']:
+                if table_result.get('success'):
+                    table = table_result['table']
+                    deleted = table_result['records_deleted']
+                    duration = table_result.get('duration', 0)
+                    print(f"   ✅ {table}: {deleted:,} 条 ({duration:.2f}s)")
+                else:
+                    table = table_result['table']
+                    error = table_result.get('error', '未知错误')
+                    print(f"   ❌ {table}: 失败 ({error})")
+        
+        # 总计
+        total_deleted = results.get('total_records_deleted', 0)
+        print(f"\n📈 总计删除: {total_deleted:,} 条记录")
+        
+        # 错误信息
+        if results.get('errors'):
+            print(f"\n⚠️  错误信息:")
+            for error in results['errors']:
+                print(f"   • {error}")
+        
+        # 成功状态
+        success_status = results.get('success')
+        if success_status == 'partial':
+            print("\n⚠️  部分成功，请检查错误信息")
+        elif success_status:
+            print("\n✅ 清理操作全部成功完成")
+
+
+def main():
+    """主函数"""
+    parser = argparse.ArgumentParser(
+        description='模块化Nginx日志处理器',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+使用示例:
+  python nginx_processor_modular.py                             # 交互式菜单 (推荐)
+  python nginx_processor_modular.py process --date 20250422     # 处理指定日期
+  python nginx_processor_modular.py process --date 20250422 --force  # 强制重新处理
+  python nginx_processor_modular.py process-all                 # 处理所有未处理日志
+  python nginx_processor_modular.py status                      # 查看系统状态
+  python nginx_processor_modular.py clear-all                   # 清空所有数据
+        """
+    )
+    
+    subparsers = parser.add_subparsers(dest='command', help='可用命令')
+    
+    # process命令
+    process_parser = subparsers.add_parser('process', help='处理指定日期的日志')
+    process_parser.add_argument('--date', required=True, help='日期 (YYYYMMDD格式)')
+    process_parser.add_argument('--force', action='store_true', help='强制重新处理')
+    
+    # 其他命令
+    subparsers.add_parser('process-all', help='处理所有未处理的日志')
+    subparsers.add_parser('status', help='查看系统状态')
+    subparsers.add_parser('clear-all', help='清空所有数据 (开发环境使用)')
+    
+    args = parser.parse_args()
+    
+    # 初始化处理器
+    processor = NginxProcessorModular()
+    
+    # 如果没有参数，显示交互式菜单
+    if not args.command:
+        processor.interactive_menu()
+        return
+    
+    # 执行对应命令
+    if args.command == 'process':
+        # 验证日期格式
+        try:
+            datetime.strptime(args.date, '%Y%m%d')
+        except ValueError:
+            print("❌ 日期格式错误，请使用YYYYMMDD格式，例如: 20250422")
+            return
+        
+        result = processor.process_specific_date(args.date, args.force)
+        processor._print_single_date_result(result)
+    
+    elif args.command == 'process-all':
+        result = processor.process_all_unprocessed_logs()
+        processor._print_process_result(result, "批量处理")
+    
+    elif args.command == 'status':
+        processor.show_status()
+    
+    elif args.command == 'clear-all':
+        confirm = input("⚠️  确认清空所有数据？这将删除数据库中的所有日志数据 (y/N): ")
+        if confirm.lower() == 'y':
+            second_confirm = input("再次确认！这将不可恢复地删除所有数据 (输入 'DELETE' 确认): ").strip()
+            if second_confirm == 'DELETE':
+                processor.clear_all_data()
+            else:
+                print("❌ 确认失败，操作已取消")
+        else:
+            print("❌ 操作已取消")
+
 
 if __name__ == "__main__":
     # 设置日志
