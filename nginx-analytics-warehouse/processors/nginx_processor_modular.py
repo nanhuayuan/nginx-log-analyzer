@@ -21,6 +21,7 @@ import logging
 from log_parser import NginxLogParser
 from data_processor import DataProcessor  
 from database_writer import DatabaseWriter
+from materialized_view_manager import MaterializedViewManager
 
 class NginxProcessorModular:
     """模块化Nginx日志处理器主控制器"""
@@ -34,6 +35,8 @@ class NginxProcessorModular:
         self.log_parser = NginxLogParser()
         self.data_processor = DataProcessor()
         self.database_writer = DatabaseWriter(host='localhost', port=8123,
+                 database='nginx_analytics', user='analytics_user', password='analytics_password')
+        self.mv_manager = MaterializedViewManager(host='localhost', port=8123,
                  database='nginx_analytics', user='analytics_user', password='analytics_password')
         
         # 日志配置
@@ -442,13 +445,14 @@ class NginxProcessorModular:
             print("1. 处理所有未处理的日志 (推荐)")
             print("2. 处理指定日期的日志")
             print("3. 查看系统状态")
-            print("4. 清空所有数据 (仅开发环境)")
-            print("5. 强制重新处理所有日志")
+            print("4. 物化视图管理")
+            print("5. 清空所有数据 (仅开发环境)")
+            print("6. 强制重新处理所有日志")
             print("0. 退出")
             print("-" * 60)
             
             try:
-                choice = input("请选择操作 [0-5]: ").strip()
+                choice = input("请选择操作 [0-6]: ").strip()
                 
                 if choice == '0':
                     print("👋 再见！")
@@ -487,6 +491,11 @@ class NginxProcessorModular:
                     input("\n按回车键继续...")
                 
                 elif choice == '4':
+                    print("\n📊 物化视图管理")
+                    self.materialized_view_menu()
+                    input("\n按回车键继续...")
+                
+                elif choice == '5':
                     print("\n⚠️  清空所有数据 (仅开发环境使用)")
                     confirm = input("确认清空所有数据？这将删除数据库中的所有日志数据 (y/N): ").strip().lower()
                     if confirm == 'y':
@@ -500,7 +509,7 @@ class NginxProcessorModular:
                         print("❌ 操作已取消")
                     input("\n按回车键继续...")
                 
-                elif choice == '5':
+                elif choice == '6':
                     print("\n⚠️  强制重新处理所有日志")
                     confirm = input("确认强制重新处理所有日志？这将忽略处理状态重新处理 (y/N): ").strip().lower()
                     if confirm == 'y':
@@ -521,7 +530,7 @@ class NginxProcessorModular:
                     input("\n按回车键继续...")
                 
                 else:
-                    print("❌ 无效选择，请输入 0-5")
+                    print("❌ 无效选择，请输入 0-6")
                     input("按回车键继续...")
                     
             except KeyboardInterrupt:
@@ -631,6 +640,87 @@ def main():
                 print("❌ 确认失败，操作已取消")
         else:
             print("❌ 操作已取消")
+    
+    def materialized_view_menu(self):
+        """物化视图管理菜单"""
+        if not self.mv_manager.connect():
+            print("❌ 无法连接到ClickHouse，请检查服务状态")
+            return
+        
+        while True:
+            print("\n" + "-" * 50)
+            print("📊 物化视图管理")
+            print("-" * 50)
+            print("1. 查看物化视图状态")
+            print("2. 创建所有物化视图")
+            print("3. 强制重新创建物化视图")
+            print("4. 删除指定物化视图")
+            print("0. 返回主菜单")
+            print("-" * 50)
+            
+            try:
+                choice = input("请选择操作 [0-4]: ").strip()
+                
+                if choice == '0':
+                    break
+                
+                elif choice == '1':
+                    print("\n📊 物化视图状态报告:")
+                    self.mv_manager.print_status_report()
+                
+                elif choice == '2':
+                    print("\n🚀 创建所有物化视图...")
+                    results = self.mv_manager.create_all_views(force_recreate=False)
+                    print(f"✅ 创建完成: 成功 {results['success']}, 失败 {results['failed']}, 跳过 {results['skipped']}")
+                
+                elif choice == '3':
+                    confirm = input("\n⚠️  确认强制重新创建所有物化视图？(y/N): ").strip().lower()
+                    if confirm == 'y':
+                        print("\n🔄 强制重新创建所有物化视图...")
+                        results = self.mv_manager.create_all_views(force_recreate=True)
+                        print(f"✅ 重新创建完成: 成功 {results['success']}, 失败 {results['failed']}")
+                    else:
+                        print("❌ 操作已取消")
+                
+                elif choice == '4':
+                    # 显示可删除的物化视图
+                    status_list = self.mv_manager.get_view_status()
+                    existing_views = [s['view_name'] for s in status_list if s['exists']]
+                    
+                    if not existing_views:
+                        print("❌ 没有可删除的物化视图")
+                        continue
+                    
+                    print("\n📋 现有物化视图:")
+                    for i, view_name in enumerate(existing_views, 1):
+                        print(f"   {i}. {view_name}")
+                    
+                    try:
+                        idx = int(input(f"\n选择要删除的物化视图 [1-{len(existing_views)}]: ").strip()) - 1
+                        if 0 <= idx < len(existing_views):
+                            view_name = existing_views[idx]
+                            confirm = input(f"⚠️  确认删除物化视图 '{view_name}'？(y/N): ").strip().lower()
+                            if confirm == 'y':
+                                success, msg = self.mv_manager.drop_materialized_view(view_name)
+                                print(msg)
+                            else:
+                                print("❌ 操作已取消")
+                        else:
+                            print("❌ 无效选择")
+                    except ValueError:
+                        print("❌ 请输入有效数字")
+                
+                else:
+                    print("❌ 无效选择，请输入 0-4")
+                
+                input("\n按回车键继续...")
+                
+            except KeyboardInterrupt:
+                print("\n返回主菜单...")
+                break
+            except Exception as e:
+                print(f"❌ 操作失败: {str(e)}")
+                input("按回车键继续...")
 
 if __name__ == "__main__":
     # 设置日志
