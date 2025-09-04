@@ -473,6 +473,70 @@ PARTITION BY toYYYYMM(stat_time)
 ORDER BY (stat_time, platform, error_rate, api_path)
 TTL stat_time + INTERVAL 1 YEAR;
 
+-- 12. 对应错误码下钻分析 - 新增专门的错误分析表
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_error_analysis_detailed (
+    stat_time DateTime,                              -- 统计时间
+    time_granularity LowCardinality(String),         -- hour/day/week
+    
+    -- 基础维度
+    platform LowCardinality(String),                 -- 平台维度
+    access_type LowCardinality(String),              -- 接入方式
+    api_path String,                                 -- 接口路径
+    
+    -- 错误码下钻维度（核心）
+    response_status_code LowCardinality(String),     -- 具体错误码: 400/401/403/404/500/502/503/504
+    error_code_group LowCardinality(String),         -- 错误码组: 4xx_client/5xx_server/gateway/upstream
+    http_error_class LowCardinality(String),         -- HTTP错误分类: client_error/server_error/redirection
+    error_severity_level LowCardinality(String),     -- 严重程度: critical/high/medium/low
+    
+    -- 错误定位维度
+    upstream_server String,                          -- 上游服务器
+    upstream_status_code LowCardinality(String),     -- 上游返回的状态码
+    error_location LowCardinality(String),           -- 错误发生位置: gateway/service/database
+    error_propagation_path String,                   -- 错误传播路径: client->gateway->service->db
+    
+    -- 业务影响维度
+    business_operation_type LowCardinality(String),  -- 业务操作类型: login/payment/query/upload
+    user_session_stage LowCardinality(String),       -- 用户会话阶段: first_request/active_session/checkout
+    api_importance_level LowCardinality(String),     -- 接口重要性: critical/important/normal/optional
+    
+    -- 客户端分析维度
+    client_ip_type LowCardinality(String),           -- 客户端类型: internal/external/suspicious
+    user_agent_category LowCardinality(String),      -- 客户端分类: browser/mobile/api/bot
+    user_type LowCardinality(String),                -- 用户类型: normal/vip/bot/crawler
+    
+    -- 时间模式维度
+    time_pattern LowCardinality(String),             -- 时间模式: business_hours/peak_hours/off_hours
+    error_burst_indicator LowCardinality(String),    -- 错误爆发指示: single/burst/sustained
+    
+    -- 核心指标
+    error_count UInt64,                              -- 错误次数
+    total_requests UInt64,                           -- 总请求数
+    error_rate Float64,                              -- 错误率
+    unique_error_users UInt64,                       -- 受影响的唯一用户数
+    error_sessions UInt64,                           -- 受影响的会话数
+    
+    -- 业务影响指标
+    business_loss_estimate Float64,                  -- 业务损失估算
+    user_experience_score Float64,                   -- 用户体验评分
+    sla_impact Float64,                              -- SLA影响程度
+    
+    -- 恢复指标
+    mean_time_to_recovery Float64,                   -- 平均恢复时间(分钟)
+    error_duration UInt32,                           -- 错误持续时间(分钟)
+    resolution_success_rate Float64,                 -- 问题解决成功率
+    
+    -- 预警指标
+    error_trend_score Float64,                       -- 错误趋势评分
+    anomaly_score Float64,                           -- 异常评分
+    escalation_risk LowCardinality(String),          -- 升级风险: low/medium/high/critical
+    
+    created_at DateTime DEFAULT now()
+) ENGINE = SummingMergeTree()
+PARTITION BY toYYYYMM(stat_time)
+ORDER BY (stat_time, response_status_code, platform, access_type, api_path)
+TTL stat_time + INTERVAL 1 YEAR;
+
 -- 表注释：api_performance_analysis 01.接口性能分析 - 支持任意时间段、多平台维度分析
 -- 表注释：service_level_analysis 02.服务层级分析 - 服务健康度和性能监控
 -- 表注释：slow_request_analysis 03.慢请求分析 - 慢请求识别和优化建议
