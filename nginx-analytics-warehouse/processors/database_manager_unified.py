@@ -118,6 +118,22 @@ class DatabaseManagerUnified:
             self.client = None
             return False
     
+    def connect_for_rebuild(self) -> bool:
+        """为重建操作连接到ClickHouse（使用系统数据库）"""
+        try:
+            # 创建系统连接配置（连接到default数据库）
+            system_config = self.config.copy()
+            system_config['database'] = 'default'
+            
+            self.client = clickhouse_connect.get_client(**system_config)
+            self.client.ping()
+            self.logger.info(f"成功连接到ClickHouse系统数据库: {system_config['host']}:{system_config['port']}")
+            return True
+        except Exception as e:
+            self.logger.error(f"连接ClickHouse系统数据库失败: {str(e)}")
+            self.client = None
+            return False
+    
     def close(self):
         """关闭ClickHouse连接"""
         if self.client:
@@ -270,7 +286,7 @@ class DatabaseManagerUnified:
         start_time = time.time()
         
         # 使用新的物化视图SQL文件
-        mv_sql_file = self.ddl_dir / "04_materialized_views_v2.sql"
+        mv_sql_file = self.ddl_dir / "04_materialized_views_corrected.sql"
         
         if not mv_sql_file.exists():
             result['success'] = False
@@ -471,6 +487,237 @@ class DatabaseManagerUnified:
         
         print("=" * 80)
     
+    def force_rebuild(self) -> Dict[str, Any]:
+        """强制重建整个架构（删除后重新创建）"""
+        # 对于重建操作，需要连接到系统数据库
+        if not self.connect_for_rebuild():
+            return {'success': False, 'message': '数据库连接失败'}
+        
+        print("⚠️  即将删除整个数据库架构！")
+        confirm = input("输入 'YES' 确认删除并重建: ").strip()
+        
+        if confirm != 'YES':
+            return {'success': False, 'message': '用户取消操作'}
+        
+        try:
+            # 删除数据库
+            self.logger.info(f"删除数据库: {self.database}")
+            self.client.command(f"DROP DATABASE IF EXISTS {self.database}")
+            print(f"🗑️  数据库 {self.database} 已删除")
+            
+            # 重新创建数据库
+            self.logger.info(f"创建数据库: {self.database}")
+            self.client.command(f"CREATE DATABASE IF NOT EXISTS {self.database}")
+            print(f"🏗️  数据库 {self.database} 已重新创建")
+            
+            # 断开连接并重新连接到新数据库
+            self.close()
+            if not self.connect():
+                return {'success': False, 'message': '重新连接数据库失败'}
+            
+            # 重新初始化架构
+            return self.initialize_complete_architecture()
+            
+        except Exception as e:
+            error_msg = f"强制重建失败: {str(e)}"
+            self.logger.error(error_msg)
+            return {'success': False, 'message': error_msg}
+    
+    def clean_all_data(self) -> Dict[str, Any]:
+        """清理所有数据（保留表结构）"""
+        if not self.connect():
+            return {'success': False, 'message': '数据库连接失败'}
+        
+        print("⚠️  即将清空所有表数据（保留表结构）！")
+        confirm = input("输入 'YES' 确认清空数据: ").strip()
+        
+        if confirm != 'YES':
+            return {'success': False, 'message': '用户取消操作'}
+        
+        try:
+            # 获取所有表
+            tables_query = f"SHOW TABLES FROM {self.database}"
+            result = self.client.query(tables_query)
+            tables = [row[0] for row in result.result_rows]
+            
+            cleaned_count = 0
+            errors = []
+            
+            for table in tables:
+                try:
+                    self.client.command(f"TRUNCATE TABLE {self.database}.{table}")
+                    cleaned_count += 1
+                    print(f"🧹 已清空: {table}")
+                except Exception as e:
+                    errors.append(f"清空 {table} 失败: {str(e)}")
+                    self.logger.error(f"清空表 {table} 失败: {str(e)}")
+            
+            message = f"数据清理完成: {cleaned_count}/{len(tables)} 个表"
+            return {
+                'success': len(errors) == 0,
+                'message': message,
+                'cleaned_tables': cleaned_count,
+                'total_tables': len(tables),
+                'errors': errors
+            }
+            
+        except Exception as e:
+            error_msg = f"清理数据失败: {str(e)}"
+            self.logger.error(error_msg)
+            return {'success': False, 'message': error_msg}
+    
+    def interactive_menu(self):
+        """交互式菜单"""
+        while True:
+            print("\n" + "="*80)
+            print("🏛️   ClickHouse 统一数据库管理工具 v2.0")
+            print("="*80)
+            print("1. 🚀 初始化完整架构（创建所有表和物化视图）")
+            print("2. 📊 检查架构状态（显示表和视图状态）") 
+            print("3. 🔍 验证架构完整性（检查字段映射和数据质量）")
+            print("4. 🔄 强制重建架构（删除数据库后重新创建）")
+            print("5. 🧹 清理所有数据（保留表结构，清空数据）")
+            print("6. 📋 单独执行DDL文件")
+            print("7. 🔧 创建单个物化视图")
+            print("0. 👋 退出")
+            print("-"*80)
+            
+            try:
+                choice = input("请选择操作 [0-7]: ").strip()
+                
+                if choice == '0':
+                    print("👋 再见！")
+                    break
+                elif choice == '1':
+                    print("🚀 开始初始化完整架构...")
+                    result = self.initialize_complete_architecture()
+                    self._print_result(result)
+                    
+                elif choice == '2':
+                    self.print_architecture_report()
+                    
+                elif choice == '3':
+                    print("🔍 验证架构完整性...")
+                    if self.connect():
+                        result = self.validate_architecture()
+                        self._print_result(result)
+                        
+                elif choice == '4':
+                    result = self.force_rebuild()
+                    self._print_result(result)
+                    
+                elif choice == '5':
+                    result = self.clean_all_data()
+                    self._print_result(result)
+                    
+                elif choice == '6':
+                    self._execute_single_ddl_file()
+                    
+                elif choice == '7':
+                    self._create_single_materialized_view()
+                    
+                else:
+                    print("❌ 无效选择，请重新输入")
+                    
+                if choice != '0':
+                    input("\n按回车键继续...")
+                    
+            except KeyboardInterrupt:
+                print("\n👋 再见！")
+                break
+            except Exception as e:
+                print(f"❌ 操作失败: {e}")
+                input("按回车键继续...")
+    
+    def _execute_single_ddl_file(self):
+        """执行单个DDL文件"""
+        ddl_files = ['01_ods_layer_real.sql', '02_dwd_layer_real.sql', 
+                     '03_ads_layer_real.sql', '04_materialized_views_corrected.sql']
+        
+        print("\n📄 可用的DDL文件:")
+        for i, file in enumerate(ddl_files, 1):
+            file_path = self.ddl_dir / file
+            status = "✅ 存在" if file_path.exists() else "❌ 不存在"
+            print(f"   {i}. {file} ({status})")
+        
+        try:
+            choice = int(input(f"\n选择文件 [1-{len(ddl_files)}]: ").strip())
+            if 1 <= choice <= len(ddl_files):
+                selected_file = ddl_files[choice - 1]
+                
+                if not self.connect():
+                    print("❌ 数据库连接失败")
+                    return
+                
+                # 确保数据库存在
+                self.client.command(f"CREATE DATABASE IF NOT EXISTS {self.database}")
+                
+                result = self._execute_ddl_phase(f"执行{selected_file}", [selected_file])
+                self._print_result(result)
+                
+            else:
+                print("❌ 无效选择")
+        except ValueError:
+            print("❌ 请输入数字")
+    
+    def _create_single_materialized_view(self):
+        """创建单个物化视图"""
+        print("\n🔧 可用的物化视图:")
+        views = list(self.materialized_views.keys())
+        
+        for i, view in enumerate(views, 1):
+            config = self.materialized_views[view]
+            status = "✅ 运行中" if (self.connect() and self._view_exists(view)) else "❌ 未创建"
+            print(f"   {i}. {view} → {config['target_table']} ({status})")
+            print(f"      📝 {config['description']}")
+        
+        try:
+            choice = int(input(f"\n选择视图 [1-{len(views)}]: ").strip())
+            if 1 <= choice <= len(views):
+                selected_view = views[choice - 1]
+                config = self.materialized_views[selected_view]
+                
+                if not self.connect():
+                    print("❌ 数据库连接失败")
+                    return
+                
+                try:
+                    # 删除已存在的视图
+                    self.client.command(f"DROP VIEW IF EXISTS {self.database}.{selected_view}")
+                    
+                    # 创建新视图
+                    create_sql = config['sql_template']
+                    self.client.command(create_sql)
+                    
+                    print(f"✅ 物化视图 {selected_view} 创建成功")
+                    
+                except Exception as e:
+                    print(f"❌ 创建物化视图失败: {str(e)}")
+                    
+            else:
+                print("❌ 无效选择")
+        except ValueError:
+            print("❌ 请输入数字")
+    
+    def _print_result(self, result: Dict[str, Any]):
+        """打印操作结果"""
+        if result.get('success', False):
+            print(f"✅ 操作成功完成")
+            if 'message' in result:
+                print(f"📝 {result['message']}")
+            if 'total_duration' in result:
+                print(f"⏱️  耗时: {result['total_duration']:.2f} 秒")
+        else:
+            print(f"❌ 操作失败")
+            if 'message' in result:
+                print(f"📝 {result['message']}")
+            if 'errors' in result:
+                print("🐛 错误详情:")
+                for i, error in enumerate(result['errors'][:5], 1):
+                    print(f"   {i}. {error}")
+                if len(result['errors']) > 5:
+                    print(f"   ... 还有 {len(result['errors']) - 5} 个错误")
+    
     # ==================== 工具方法 ====================
     
     def _split_sql_statements(self, sql_content: str) -> List[str]:
@@ -601,49 +848,70 @@ class DatabaseManagerUnified:
 
 
 def main():
-    """主函数 - 命令行工具"""
-    import argparse
+    """主函数 - 支持命令行和交互式两种模式"""
+    import sys
     
-    parser = argparse.ArgumentParser(description='统一数据库管理器')
-    parser.add_argument('action', choices=['init', 'status', 'validate'], 
-                       help='操作类型: init=初始化架构, status=查看状态, validate=验证架构')
-    
-    args = parser.parse_args()
-    
-    # 设置日志
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    
-    # 创建管理器实例
-    manager = DatabaseManagerUnified()
-    
-    if args.action == 'init':
-        print("🚀 开始初始化数据库架构...")
-        result = manager.initialize_complete_architecture()
+    # 支持命令行参数
+    if len(sys.argv) > 1:
+        arg = sys.argv[1].lower()
+        manager = DatabaseManagerUnified()
         
-        if result['success']:
-            print(f"✅ 架构初始化成功! 耗时: {result['total_duration']:.2f}秒")
-        else:
-            print(f"❌ 架构初始化失败!")
-            for error in result['errors'][:3]:
-                print(f"   • {error}")
-    
-    elif args.action == 'status':
-        manager.print_architecture_report()
-    
-    elif args.action == 'validate':
-        print("🔍 验证架构完整性...")
-        if manager.connect():
-            result = manager.validate_architecture()
-            manager.close()
-            
-            if result['success']:
-                print(f"✅ 架构验证通过!")
-                print(f"   表验证: {result['tables_validated']} 个")
-                print(f"   视图验证: {result['views_validated']} 个")
+        try:
+            if arg in ['init', '1']:
+                print("🚀 开始初始化完整架构...")
+                result = manager.initialize_complete_architecture()
+                manager._print_result(result)
+                success = result.get('success', False)
+                sys.exit(0 if success else 1)
+                
+            elif arg in ['status', '2']:
+                manager.print_architecture_report()
+                sys.exit(0)
+                
+            elif arg in ['validate', '3']:
+                print("🔍 验证架构完整性...")
+                if manager.connect():
+                    result = manager.validate_architecture()
+                    manager._print_result(result)
+                    success = result.get('success', False)
+                    sys.exit(0 if success else 1)
+                else:
+                    print("❌ 数据库连接失败")
+                    sys.exit(1)
+                
+            elif arg in ['rebuild', '4']:
+                print("🔄 开始强制重建架构...")
+                result = manager.force_rebuild()
+                manager._print_result(result)
+                success = result.get('success', False)
+                sys.exit(0 if success else 1)
+                
+            elif arg in ['clean', '5']:
+                result = manager.clean_all_data()
+                manager._print_result(result)
+                success = result.get('success', False)
+                sys.exit(0 if success else 1)
+                
             else:
-                print(f"❌ 架构验证失败!")
-                for error in result['errors'][:3]:
-                    print(f"   • {error}")
+                print(f"❌ 未知参数: {arg}")
+                print("可用参数:")
+                print("  init/1     - 初始化完整架构")
+                print("  status/2   - 检查架构状态")
+                print("  validate/3 - 验证架构完整性")
+                print("  rebuild/4  - 强制重建架构")
+                print("  clean/5    - 清理所有数据")
+                print("\n💡 不带参数运行可进入交互式模式")
+                sys.exit(1)
+        finally:
+            manager.close()
+    else:
+        # 交互式模式
+        print("💡 进入交互式模式...")
+        manager = DatabaseManagerUnified()
+        try:
+            manager.interactive_menu()
+        finally:
+            manager.close()
 
 
 if __name__ == "__main__":

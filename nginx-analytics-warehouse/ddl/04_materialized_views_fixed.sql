@@ -57,7 +57,6 @@ AS SELECT
     
     now() as created_at
 FROM nginx_analytics.dwd_nginx_enriched_v2
-WHERE log_time >= now() - INTERVAL 1 DAY
 GROUP BY 
     stat_time, platform, access_type, api_path, 
     api_module, api_category, business_domain;
@@ -119,7 +118,6 @@ AS SELECT
     
     now() as created_at
 FROM nginx_analytics.dwd_nginx_enriched_v2
-WHERE log_time >= now() - INTERVAL 1 DAY
 GROUP BY 
     stat_time, platform, access_type, service_name, 
     application_name, upstream_server;
@@ -197,13 +195,12 @@ AS SELECT
     
     now() as created_at
 FROM nginx_analytics.dwd_nginx_enriched_v2
-WHERE log_time >= now() - INTERVAL 1 DAY
 GROUP BY 
     stat_time, platform, access_type, api_path, 
     slow_reason_category, bottleneck_type, upstream_server,
     connection_type, request_size_category, user_agent_category;
 
--- 4. 状态码分析物化视图 - 对应04.状态码统计.xlsx
+-- 4. 状态码分析物化视图 - 对应04.状态码统计.xlsx (修复版)
 CREATE MATERIALIZED VIEW IF NOT EXISTS nginx_analytics.mv_status_code_hourly
 TO nginx_analytics.ads_status_code_analysis
 AS SELECT
@@ -211,72 +208,31 @@ AS SELECT
     'hour' as time_granularity,
     platform,
     access_type,
-    toString(response_status_code) as response_status_code,
     request_uri as api_path,
-    
-    -- 错误分类 (动态计算)
+    api_module,
+    api_category,
+    business_domain,
+    response_status_code as status_code,
     multiIf(
-        response_status_code >= 400 AND response_status_code < 500, 'client_error',
-        response_status_code >= 500 AND response_status_code < 600, 'server_error',
-        response_status_code >= 300 AND response_status_code < 400, 'redirection',
+        response_status_code >= '400' AND response_status_code < '500', 'client_error',
+        response_status_code >= '500' AND response_status_code < '600', 'server_error',
+        response_status_code >= '300' AND response_status_code < '400', 'redirection',
         'success'
-    ) as error_category,
-    
-    -- 错误严重性
+    ) as status_class,
+    count() as request_count,
+    count() * 100.0 / sum(count()) OVER (PARTITION BY stat_time, platform, access_type) as percentage,
     multiIf(
-        response_status_code IN (500, 502, 503, 504), 'critical',
-        response_status_code IN (401, 403, 429), 'high',
-        response_status_code IN (400, 404, 422), 'medium',
-        'low'
-    ) as error_severity,
-    
-    multiIf(
-        upstream_server != '', upstream_server,
-        'direct'
-    ) as upstream_server,
-    
-    -- IP类型分类 (动态计算)
-    multiIf(
-        is_internal_ip, 'internal',
-        ip_risk_level = 'High', 'suspicious',
-        'external'
-    ) as client_ip_type,
-    
-    -- 用户类型 (动态计算)
-    multiIf(
-        device_type = 'Bot', 'bot',
-        device_type = 'Mobile', 'mobile_user',
-        device_type = 'Desktop', 'desktop_user',
-        'unknown'
-    ) as user_type,
-    
-    -- 错误统计
-    count() as total_errors,
-    countIf(response_status_code >= 400 AND response_status_code < 500) as client_errors,
-    countIf(response_status_code >= 500) as server_errors,
-    countIf(response_status_code IN (502, 503, 504)) as gateway_errors,
-    
-    -- 影响面
-    uniq(client_ip) as affected_users,  -- 使用client_ip作为user_id替代
-    uniq(request_uri) as affected_apis,
-    
-    -- 错误率
-    count() * 100.0 / (
-        SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v2 
-        WHERE toStartOfHour(log_time) = stat_time 
-        AND platform = outer.platform
-    ) as error_rate,
-    
-    -- 可用性影响
-    100.0 - (countIf(response_status_code >= 500) * 100.0 / count()) as availability_impact,
-    
+        response_status_code >= '400', 'error',
+        'success'
+    ) as error_type,
+    CAST([] as Array(String)) as common_error_apis,
+    0.0 as vs_previous_period,
+    false as is_anomaly,
     now() as created_at
-FROM nginx_analytics.dwd_nginx_enriched_v2 outer
-WHERE log_time >= now() - INTERVAL 1 DAY
-  AND response_status_code >= 400
+FROM nginx_analytics.dwd_nginx_enriched_v2
 GROUP BY 
-    stat_time, platform, access_type, response_status_code, api_path,
-    error_category, error_severity, upstream_server, client_ip_type, user_type;
+    stat_time, time_granularity, platform, access_type, api_path, 
+    api_module, api_category, business_domain, status_code, status_class, error_type;
 
 -- 5. 时间维度分析物化视图 - 对应05.时间维度分析.xlsx
 CREATE MATERIALIZED VIEW IF NOT EXISTS nginx_analytics.mv_time_dimension_hourly
@@ -318,7 +274,6 @@ AS SELECT
     
     now() as created_at
 FROM nginx_analytics.dwd_nginx_enriched_v2
-WHERE log_time >= now() - INTERVAL 1 DAY
 GROUP BY 
     stat_time, platform, access_type, peak_period, business_hours, api_category;
 
@@ -430,9 +385,9 @@ AS SELECT
     'single' as error_burst_indicator,
     
     -- 错误统计
-    count() as error_count,
-    0 as total_requests,
-    100.0 as error_rate,
+    toUInt64(count()) as error_count,
+    toUInt64(0) as total_requests,
+    toFloat64(100.0) as error_rate,
     
     -- 影响评估
     uniq(client_ip) as unique_error_users,  -- 使用client_ip作为user_id替代
@@ -457,8 +412,7 @@ AS SELECT
     
     now() as created_at
 FROM nginx_analytics.dwd_nginx_enriched_v2
-WHERE log_time >= now() - INTERVAL 1 DAY
-  AND response_status_code >= 400
+WHERE response_status_code >= 400
 GROUP BY 
     stat_time, platform, access_type, api_path, response_status_code,
     error_code_group, http_error_class, error_severity_level, upstream_server,
@@ -502,9 +456,9 @@ AS SELECT
     ) as client_ip_type,
     
     -- 请求统计
-    count() as request_count,
-    uniq(client_ip) as user_count,        -- 使用client_ip作为user_id替代
-    uniq(trace_id) as session_count,      -- 使用trace_id作为session_id替代
+    toUInt64(count()) as request_count,
+    toUInt64(uniq(client_ip)) as user_count,        -- 使用client_ip作为user_id替代
+    toUInt64(uniq(trace_id)) as session_count,      -- 使用trace_id作为session_id替代
     
     -- 性能指标
     avg(total_request_duration) as avg_response_time,
@@ -517,7 +471,6 @@ AS SELECT
     
     now() as created_at
 FROM nginx_analytics.dwd_nginx_enriched_v2
-WHERE log_time >= now() - INTERVAL 1 DAY
 GROUP BY 
     stat_time, platform, access_type, user_agent_category, user_agent_version,
     device_type, os_type, browser_type, is_bot, client_ip_type;
