@@ -26,7 +26,7 @@ class DatabaseManagerUnified:
     
     def __init__(self, host: str = 'localhost', port: int = 8123, 
                  database: str = 'nginx_analytics', user: str = 'analytics_user', 
-                 password: str = 'analytics_password'):
+                 password: str = 'analytics_password_change_in_prod'):
         """
         初始化统一数据库管理器
         

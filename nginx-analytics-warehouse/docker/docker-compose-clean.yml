@@ -1,0 +1,177 @@
+services:
+  # ========== 核心数据存储 ==========
+  
+  # ClickHouse 数据库 - 使用简化的健康检查
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: nginx-analytics-clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: nginx_analytics
+      CLICKHOUSE_USER: analytics_user
+      CLICKHOUSE_PASSWORD: analytics_password_change_in_prod
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    user: "101:101"
+    networks:
+      - nginx-analytics
+    # 修复健康检查 - 使用TCP端口检查
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8123 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: nginx-analytics-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - nginx-analytics
+    command: redis-server --appendonly yes --requirepass redis_password
+
+  # ========== BI工具 ==========
+  
+  # Grafana 数据可视化
+  grafana:
+    image: grafana/grafana:latest
+    container_name: nginx-analytics-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_INSTALL_PLUGINS: vertamedia-clickhouse-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - nginx-analytics
+    depends_on:
+      - clickhouse
+
+  # PostgreSQL for Superset
+  postgres:
+    image: postgres:13
+    container_name: nginx-analytics-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: superset
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nginx-analytics
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superset -d superset"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Apache Superset
+  superset:
+    image: apache/superset:latest
+    container_name: nginx-analytics-superset
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      - SUPERSET_SECRET_KEY=nginx_analytics_secret_key_change_in_production
+      - DATABASE_HOST=postgres
+      - DATABASE_DB=superset
+      - DATABASE_USER=superset
+      - DATABASE_PASSWORD=superset_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redis_password
+    volumes:
+      - superset_data:/app/superset_home
+    networks:
+      - nginx-analytics
+    depends_on:
+      - postgres
+      - redis
+      - clickhouse
+
+  # ========== DataEase独立配置 ==========
+  
+  # DataEase MySQL数据库
+  dataease-mysql:
+    image: registry.cn-qingdao.aliyuncs.com/dataease/mysql:8.3.0
+    container_name: nginx-analytics-dataease-mysql
+    restart: unless-stopped
+    ports:
+      - "3310:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: DataEase@2024
+      MYSQL_DATABASE: dataease
+      TZ: Asia/Shanghai
+    volumes:
+      - dataease_mysql_data:/var/lib/mysql
+    networks:
+      - nginx-analytics
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pDataEase@2024"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # DataEase BI平台 - v2.5.0稳定版
+  dataease:
+    image: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.5.0
+    container_name: nginx-analytics-dataease
+    restart: unless-stopped
+    ports:
+      - "8881:8100"
+    volumes:
+      - ./services/dataease/config:/opt/apps/config
+      - dataease_data:/opt/dataease/data
+      - dataease_logs:/opt/dataease/logs
+    env_file:
+      - ./services/dataease/config/install.conf
+    networks:
+      - nginx-analytics
+    depends_on:
+      dataease-mysql:
+        condition: service_healthy
+    # 简化健康检查
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8100/login || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
+
+networks:
+  nginx-analytics:
+    driver: bridge
+    name: nginx-analytics
+
+volumes:
+  # 核心数据卷
+  clickhouse_data:
+  clickhouse_logs:
+  redis_data:
+  grafana_data:
+  
+  # Superset相关
+  postgres_data:
+  superset_data:
+  
+  # DataEase相关
+  dataease_mysql_data:
+  dataease_data:
+  dataease_logs:
