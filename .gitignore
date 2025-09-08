@@ -179,3 +179,6 @@ Nginx日志下载需求.txt
 /nginx-analytics-warehouse/processors/processed_logs_complete.json
 /nginx-analytics-warehouse/volumes/
 /nginx-analytics-warehouse/nul
+/nginx-analytics-warehouse/dataease/db/
+/nginx-analytics-warehouse/n9e/
+/nginx-analytics-warehouse/docker/dataease/db/

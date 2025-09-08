@@ -14,7 +14,7 @@ def main():
         port=8123, 
         database='nginx_analytics', 
         username='analytics_user', 
-        password='analytics_password'
+        password='analytics_password_change_in_prod'
     )
     
     print("✅ 连接成功")

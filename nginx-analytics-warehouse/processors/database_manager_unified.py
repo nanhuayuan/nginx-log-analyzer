@@ -51,17 +51,18 @@ class DatabaseManagerUnified:
         # DDL文件路径配置
         self.ddl_dir = Path(__file__).parent.parent / "ddl"
         
-        # 7个核心物化视图配置 - 基于v1.1设计
+        # 12个完整物化视图配置 - v4.0完整版
         self.materialized_views = self._initialize_view_definitions()
         
     def _initialize_view_definitions(self) -> Dict[str, Dict[str, Any]]:
         """
-        初始化7个物化视图定义 - 基于v1.1架构设计
+        初始化12个物化视图定义 - v4.0完整版架构设计
         
         Returns:
             Dict: 物化视图配置字典
         """
         return {
+            # 原有7个物化视图
             'mv_api_performance_hourly': {
                 'target_table': 'ads_api_performance_analysis',
                 'description': '01.接口性能分析 - 支持平台+入口+接口多维度分析',
@@ -94,14 +95,45 @@ class DatabaseManagerUnified:
             },
             'mv_error_analysis_hourly': {
                 'target_table': 'ads_error_analysis_detailed',
-                'description': '错误码下钻分析 - 支持精准错误定位和根因分析',
+                'description': '06.错误码下钻分析 - 支持精准错误定位和根因分析',
                 'priority': 1,
                 'dependencies': ['dwd_nginx_enriched_v2']
             },
             'mv_request_header_hourly': {
                 'target_table': 'ads_request_header_analysis',
-                'description': '10.请求头分析 - 支持客户端行为和用户体验分析',
+                'description': '07.请求头分析 - 支持客户端行为和用户体验分析',
                 'priority': 3,
+                'dependencies': ['dwd_nginx_enriched_v2']
+            },
+            # 新增5个物化视图 - 填补数据空白
+            'mv_api_error_analysis_hourly': {
+                'target_table': 'ads_api_error_analysis',
+                'description': '08.API错误分析 - 错误类型分类与影响分析',
+                'priority': 2,
+                'dependencies': ['dwd_nginx_enriched_v2']
+            },
+            'mv_ip_source_analysis_hourly': {
+                'target_table': 'ads_ip_source_analysis',
+                'description': '09.IP来源分析 - 风险评分与异常行为检测',
+                'priority': 3,
+                'dependencies': ['dwd_nginx_enriched_v2']
+            },
+            'mv_service_stability_analysis_hourly': {
+                'target_table': 'ads_service_stability_analysis',
+                'description': '10.服务稳定性分析 - SLA计算与稳定性评级',
+                'priority': 1,
+                'dependencies': ['dwd_nginx_enriched_v2']
+            },
+            'mv_header_performance_correlation_hourly': {
+                'target_table': 'ads_header_performance_correlation',
+                'description': '11.请求头性能关联分析 - 用户代理与性能关联',
+                'priority': 3,
+                'dependencies': ['dwd_nginx_enriched_v2']
+            },
+            'mv_comprehensive_report_hourly': {
+                'target_table': 'ads_comprehensive_report',
+                'description': '12.综合报告 - 系统健康评分与容量分析',
+                'priority': 1,
                 'dependencies': ['dwd_nginx_enriched_v2']
             }
         }
@@ -685,11 +717,28 @@ class DatabaseManagerUnified:
                     # 删除已存在的视图
                     self.client.command(f"DROP VIEW IF EXISTS {self.database}.{selected_view}")
                     
-                    # 创建新视图
-                    create_sql = config['sql_template']
-                    self.client.command(create_sql)
+                    # 从物化视图SQL文件中提取对应的创建语句
+                    mv_sql_file = self.ddl_dir / "04_materialized_views_corrected.sql"
+                    if not mv_sql_file.exists():
+                        print(f"❌ 物化视图SQL文件不存在: {mv_sql_file}")
+                        return
                     
-                    print(f"✅ 物化视图 {selected_view} 创建成功")
+                    with open(mv_sql_file, 'r', encoding='utf-8') as f:
+                        mv_sql_content = f.read()
+                    
+                    # 查找对应的物化视图创建语句
+                    statements = self._split_sql_statements(mv_sql_content)
+                    view_found = False
+                    
+                    for statement in statements:
+                        if f'CREATE MATERIALIZED VIEW IF NOT EXISTS nginx_analytics.{selected_view}' in statement:
+                            self.client.command(statement)
+                            print(f"✅ 物化视图 {selected_view} 创建成功")
+                            view_found = True
+                            break
+                    
+                    if not view_found:
+                        print(f"❌ 在SQL文件中未找到物化视图定义: {selected_view}")
                     
                 except Exception as e:
                     print(f"❌ 创建物化视图失败: {str(e)}")

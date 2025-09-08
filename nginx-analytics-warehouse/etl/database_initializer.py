@@ -19,7 +19,7 @@ class DatabaseInitializer:
             'host': os.getenv('CLICKHOUSE_HOST', 'localhost'),
             'port': int(os.getenv('CLICKHOUSE_PORT', 8123)),
             'username': os.getenv('CLICKHOUSE_USER', 'analytics_user'),
-            'password': os.getenv('CLICKHOUSE_PASSWORD', 'analytics_password'),
+            'password': os.getenv('CLICKHOUSE_PASSWORD', 'analytics_password_change_in_prod'),
             'database': os.getenv('CLICKHOUSE_DATABASE', 'nginx_analytics')
         }
         

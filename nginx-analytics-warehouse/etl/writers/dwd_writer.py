@@ -18,7 +18,7 @@ class DWDWriter:
     
     def __init__(self, host: str = 'localhost', port: int = 8123, 
                  database: str = 'nginx_analytics', username: str = 'analytics_user', 
-                 password: str = 'analytics_password'):
+                 password: str = 'analytics_password_change_in_prod'):
         """
         初始化DWD写入器
         

@@ -1,7 +1,7 @@
 services:
-  # ========== 原有服务 ==========
+  # ========== 核心数据存储 ==========
   
-  # ClickHouse 数据库
+  # ClickHouse 数据库 - 日志分析主数据库
   clickhouse:
     image: clickhouse/clickhouse-server:24.3-alpine
     container_name: nginx-analytics-clickhouse
@@ -20,11 +20,32 @@ services:
     networks:
       - nginx-analytics
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8123/ping"]
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8123 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Redis 缓存 - 共享缓存服务
+  redis:
+    image: redis:7-alpine
+    container_name: nginx-analytics-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - nginx-analytics
+    command: redis-server --appendonly yes --requirepass redis_password
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
 
+  # ========== BI数据可视化工具 ==========
+  
   # Grafana 数据可视化
   grafana:
     image: grafana/grafana:latest
@@ -38,25 +59,15 @@ services:
       GF_INSTALL_PLUGINS: vertamedia-clickhouse-datasource
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./services/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./services/grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
       - nginx-analytics
     depends_on:
-      - clickhouse
+      clickhouse:
+        condition: service_healthy
 
-  # Redis for Superset
-  redis:
-    image: redis:7-alpine
-    container_name: nginx-analytics-redis
-    restart: unless-stopped
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - nginx-analytics
-    command: redis-server --appendonly yes --requirepass redis_password
-
-  # PostgreSQL for Superset metadata
+  # PostgreSQL for Superset
   postgres:
     image: postgres:13
     container_name: nginx-analytics-postgres
@@ -77,7 +88,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # Apache Superset
+  # Apache Superset - 高级数据分析
   superset:
     image: apache/superset:latest
     container_name: nginx-analytics-superset
@@ -98,13 +109,16 @@ services:
     networks:
       - nginx-analytics
     depends_on:
-      - postgres
-      - redis
-      - clickhouse
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
 
-  # ========== 新增DataEase BI工具 ==========
+  # ========== DataEase BI工具 ==========
   
-  # DataEase MySQL数据库
+  # DataEase MySQL数据库 (修复配置)
   dataease-mysql:
     image: registry.cn-qingdao.aliyuncs.com/dataease/mysql:8.3.0
     container_name: nginx-analytics-dataease-mysql
@@ -114,31 +128,50 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: DataEase@2024
       MYSQL_DATABASE: dataease
+      TZ: Asia/Shanghai
     volumes:
       - dataease_mysql_data:/var/lib/mysql
-      - ./services/dataease/init-scripts:/docker-entrypoint-initdb.d
+      - ./services/dataease/mysql:/docker-entrypoint-initdb.d
     networks:
       - nginx-analytics
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pDataEase@2024"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # DataEase BI平台
+  # DataEase BI平台 - v2.5.0稳定版 (修复配置和环境变量)
   dataease:
-    #image: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.10.10
     image: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.5.0
     container_name: nginx-analytics-dataease
     restart: unless-stopped
     ports:
       - "8881:8100"
+    command: >
+      sh -c "
+        echo '等待MySQL服务完全启动...' &&
+        sleep 30 &&
+        echo '开始启动DataEase...' &&
+        java -Xmx2048m -Xms2048m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/opt/dataease/logs/ -jar /opt/apps/app.jar
+      "
+    environment:
+      TZ: Asia/Shanghai
+      DE_MYSQL_HOST: dataease-mysql
+      DE_MYSQL_PORT: 3306
+      DE_MYSQL_DB: dataease
+      DE_MYSQL_USERNAME: root
+      DE_MYSQL_PASSWORD: DataEase@2024
+      DE_REDIS_HOST: redis
+      DE_REDIS_PORT: 6379
+      DE_REDIS_PASSWORD: redis_password
+      DE_ENGINE_MODE: simple
+      DE_DEMO: "false"
     volumes:
       - ./services/dataease/config:/opt/apps/config
-      - dataease_logs:/opt/dataease2.0/logs
-      - dataease_static:/opt/dataease2.0/data/static-resource
-      - dataease_cache:/opt/dataease2.0/cache
-      - dataease_geo:/opt/dataease2.0/data/geo
+      - ./services/dataease/logs:/opt/dataease2.0/logs
+      - ./services/dataease/data/static-resource:/opt/dataease2.0/data/static-resource
+      - ./services/dataease/cache:/opt/dataease2.0/cache
+      - ./services/dataease/data/geo:/opt/dataease2.0/data/geo
       - dataease_data:/opt/dataease/data
     env_file:
       - ./services/dataease/config/install.conf
@@ -147,16 +180,18 @@ services:
     depends_on:
       dataease-mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "ss -tuln | grep :8100 || exit 1"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "curl -f http://localhost:8100/login || exit 1"]
+      interval: 60s
+      timeout: 15s
       retries: 3
-      start_period: 120s
+      start_period: 180s
 
   # ========== 夜莺监控栈 ==========
   
-  # MySQL for 夜莺元数据存储 + DataEase
+  # MySQL for 夜莺元数据存储
   n9e-mysql:
     image: mysql:8
     container_name: n9e-mysql
@@ -166,22 +201,22 @@ services:
       - "3308:3306"
     environment:
       TZ: Asia/Shanghai
-      MYSQL_ROOT_PASSWORD: n9e_mysql_password
+      MYSQL_ROOT_PASSWORD: 1234
       MYSQL_DATABASE: n9e_v6
     volumes:
       - n9e_mysql_data:/var/lib/mysql
-      - ./services/n9e/init-scripts:/docker-entrypoint-initdb.d/
+      - ./services/n9e/init-scripts:/docker-entrypoint-initdb.d
     networks:
       - nginx-analytics
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p1234"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   # VictoriaMetrics 时序数据库
   victoriametrics:
-    image: victoriametrics/victoria-metrics:v1.93.15
+    image: victoriametrics/victoria-metrics:v1.79.12
     container_name: nginx-analytics-victoriametrics
     hostname: victoriametrics
     restart: unless-stopped
@@ -197,6 +232,11 @@ services:
       - "--storageDataPath=/victoria-metrics-data"
       - "--loggerTimezone=Asia/Shanghai"
       - "--retentionPeriod=1y"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8428/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # 夜莺核心服务
   nightingale:
@@ -210,21 +250,24 @@ services:
     environment:
       GIN_MODE: release
       TZ: Asia/Shanghai
-      WAIT_HOSTS: n9e-mysql:3306, redis:6379, victoriametrics:8428
     volumes:
-      - ./services/n9e/config/nightingale:/app/etc
+      - ./services/n9e/config:/app/etc
       - n9e_data:/app/data
     networks:
       - nginx-analytics
     depends_on:
-      - n9e-mysql
-      - redis
-      - victoriametrics
-    command: >
-      sh -c "
-        sleep 30 &&
-        /app/n9e
-      "
+      n9e-mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      victoriametrics:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:17000/api/n9e/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # Categraf 数据采集器
   categraf:
@@ -237,7 +280,6 @@ services:
       HOST_PROC: /hostfs/proc
       HOST_SYS: /hostfs/sys
       HOST_MOUNT_PREFIX: /hostfs
-      WAIT_HOSTS: nightingale:17000
     volumes:
       - ./services/n9e/config/categraf:/etc/categraf/conf
       - /:/hostfs:ro
@@ -247,11 +289,13 @@ services:
     networks:
       - nginx-analytics
     depends_on:
-      - nightingale
+      nightingale:
+        condition: service_healthy
     privileged: true
 
-  # ========== 可选: Prometheus Node Exporter ==========
+  # ========== 可选: 系统监控 ==========
   
+  # Prometheus Node Exporter - 系统指标收集
   node-exporter:
     image: prom/node-exporter:latest
     container_name: nginx-analytics-node-exporter
@@ -275,23 +319,34 @@ networks:
     name: nginx-analytics
 
 volumes:
-  # 原有数据卷
-  postgres_data:
+  # 核心数据存储卷
   clickhouse_data:
+    driver: local
   clickhouse_logs:
-  grafana_data:
+    driver: local
   redis_data:
+    driver: local
+  
+  # BI工具数据卷
+  grafana_data:
+    driver: local
+  postgres_data:
+    driver: local
   superset_data:
+    driver: local
   
-  # DataEase相关数据卷
+  # DataEase数据卷
   dataease_mysql_data:
+    driver: local
   dataease_data:
+    driver: local
   dataease_logs:
-  dataease_static:
-  dataease_cache:
-  dataease_geo:
+    driver: local
   
-  # 夜莺相关数据卷
+  # 夜莺监控数据卷
   n9e_mysql_data:
+    driver: local
   victoriametrics_data:
+    driver: local
   n9e_data:
+    driver: local
