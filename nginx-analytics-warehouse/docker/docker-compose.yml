@@ -1,7 +1,7 @@
 services:
-  # ========== 核心数据存储 ==========
+  # ========== 核心数据存储(优先启动) ==========
   
-  # ClickHouse 数据库 - 日志分析主数据库
+  # ClickHouse 数据库 - 修复网络连接问题
   clickhouse:
     image: clickhouse/clickhouse-server:24.3-alpine
     container_name: nginx-analytics-clickhouse
@@ -16,9 +16,14 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
-    user: "101:101"
     networks:
       - nginx-analytics
+    # 使用简单的启动命令覆盖默认配置
+    command: >
+      sh -c "
+        echo '<clickhouse><listen_host>0.0.0.0</listen_host><listen_host>::</listen_host></clickhouse>' > /etc/clickhouse-server/config.d/listen.xml &&
+        /entrypoint.sh
+      "
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 8123 || exit 1"]
       interval: 30s
@@ -39,7 +44,7 @@ services:
       - nginx-analytics
     command: redis-server --appendonly yes --requirepass redis_password
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "redis_password", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -58,7 +63,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin123
       GF_INSTALL_PLUGINS: vertamedia-clickhouse-datasource
     volumes:
-      - grafana_data:/var/lib/grafana
+      - ./data/grafana:/var/lib/grafana
       - ./services/grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./services/grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
@@ -67,7 +72,7 @@ services:
       clickhouse:
         condition: service_healthy
 
-  # PostgreSQL for Superset
+  # PostgreSQL for Superset - 修复权限问题
   postgres:
     image: postgres:13
     container_name: nginx-analytics-postgres
@@ -78,6 +83,7 @@ services:
       POSTGRES_DB: superset
       POSTGRES_USER: superset
       POSTGRES_PASSWORD: superset_password
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -87,8 +93,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
 
-  # Apache Superset - 高级数据分析
+  # Apache Superset - 高级数据分析(修复配置)
   superset:
     image: apache/superset:latest
     container_name: nginx-analytics-superset
@@ -97,6 +104,7 @@ services:
       - "8088:8088"
     environment:
       - SUPERSET_SECRET_KEY=nginx_analytics_secret_key_change_in_production
+      - SUPERSET_CONFIG_PATH=/app/pythonpath/superset_config.py
       - DATABASE_HOST=postgres
       - DATABASE_DB=superset
       - DATABASE_USER=superset
@@ -106,88 +114,73 @@ services:
       - REDIS_PASSWORD=redis_password
     volumes:
       - superset_data:/app/superset_home
+      - ./services/superset/config:/app/pythonpath
     networks:
       - nginx-analytics
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8088/health || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
 
-  # ========== DataEase BI工具 ==========
+  # ========== DataEase BI工具 v2.10.12 (安全版本) ==========
   
-  # DataEase MySQL数据库 (修复配置)
+  # DataEase MySQL数据库 v2.10.12
   dataease-mysql:
-    image: registry.cn-qingdao.aliyuncs.com/dataease/mysql:8.3.0
+    image: registry.cn-qingdao.aliyuncs.com/dataease/mysql:8.4.5
     container_name: nginx-analytics-dataease-mysql
     restart: unless-stopped
     ports:
-      - "3310:3306"
+      - "3307:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: DataEase@2024
+      MYSQL_ROOT_PASSWORD: Password123@mysql
       MYSQL_DATABASE: dataease
       TZ: Asia/Shanghai
+    env_file:
+      - ./services/dataease/config/mysql.env
     volumes:
       - dataease_mysql_data:/var/lib/mysql
-      - ./services/dataease/mysql:/docker-entrypoint-initdb.d
+      - ./services/dataease/config/my.cnf:/etc/mysql/conf.d/my.cnf
     networks:
       - nginx-analytics
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pDataEase@2024"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pPassword123@mysql", "--protocol", "tcp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
 
-  # DataEase BI平台 - v2.5.0稳定版 (修复配置和环境变量)
+  # DataEase主服务 v2.10.12
   dataease:
-    image: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.5.0
+    image: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.10.12
     container_name: nginx-analytics-dataease
     restart: unless-stopped
     ports:
-      - "8881:8100"
-    command: >
-      sh -c "
-        echo '等待MySQL服务完全启动...' &&
-        sleep 30 &&
-        echo '开始启动DataEase...' &&
-        java -Xmx2048m -Xms2048m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/opt/dataease/logs/ -jar /opt/apps/app.jar
-      "
+      - "8810:8100"
     environment:
-      TZ: Asia/Shanghai
-      DE_MYSQL_HOST: dataease-mysql
-      DE_MYSQL_PORT: 3306
-      DE_MYSQL_DB: dataease
-      DE_MYSQL_USERNAME: root
-      DE_MYSQL_PASSWORD: DataEase@2024
-      DE_REDIS_HOST: redis
-      DE_REDIS_PORT: 6379
-      DE_REDIS_PASSWORD: redis_password
-      DE_ENGINE_MODE: simple
-      DE_DEMO: "false"
+      - TZ=Asia/Shanghai
     volumes:
       - ./services/dataease/config:/opt/apps/config
-      - ./services/dataease/logs:/opt/dataease2.0/logs
-      - ./services/dataease/data/static-resource:/opt/dataease2.0/data/static-resource
-      - ./services/dataease/cache:/opt/dataease2.0/cache
-      - ./services/dataease/data/geo:/opt/dataease2.0/data/geo
-      - dataease_data:/opt/dataease/data
-    env_file:
-      - ./services/dataease/config/install.conf
+      - dataease_logs:/opt/dataease2.0/logs
+      - dataease_data:/opt/dataease2.0/data
+      - dataease_cache:/opt/dataease2.0/cache
     networks:
       - nginx-analytics
     depends_on:
       dataease-mysql:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8100/login || exit 1"]
-      interval: 60s
-      timeout: 15s
+      test: ["CMD-SHELL", "curl -f http://localhost:8100/ || exit 1"]
+      interval: 30s
+      timeout: 10s
       retries: 3
-      start_period: 180s
+      start_period: 120s
 
   # ========== 夜莺监控栈 ==========
   
@@ -204,7 +197,7 @@ services:
       MYSQL_ROOT_PASSWORD: 1234
       MYSQL_DATABASE: n9e_v6
     volumes:
-      - n9e_mysql_data:/var/lib/mysql
+      - ./data/n9e-mysql:/var/lib/mysql
       - ./services/n9e/init-scripts:/docker-entrypoint-initdb.d
     networks:
       - nginx-analytics
@@ -225,7 +218,7 @@ services:
     environment:
       TZ: Asia/Shanghai
     volumes:
-      - victoriametrics_data:/victoria-metrics-data
+      - ./data/victoriametrics:/victoria-metrics-data
     networks:
       - nginx-analytics
     command:
@@ -233,12 +226,13 @@ services:
       - "--loggerTimezone=Asia/Shanghai"
       - "--retentionPeriod=1y"
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8428/health || exit 1"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8428/health || exit 1"]
+      interval: 60s
+      timeout: 15s
       retries: 3
+      start_period: 30s
 
-  # 夜莺核心服务
+  # 夜莺核心服务 - 修复启动配置
   nightingale:
     image: flashcatcloud/nightingale:latest
     container_name: nginx-analytics-nightingale
@@ -250,9 +244,11 @@ services:
     environment:
       GIN_MODE: release
       TZ: Asia/Shanghai
+      WAIT_HOSTS: n9e-mysql:3306, nginx-analytics-redis:6379
+      N9E_CONFIGS: /app/etc
     volumes:
-      - ./services/n9e/config:/app/etc
-      - n9e_data:/app/data
+      - ./services/n9e/config/nightingale:/app/etc
+      - ./data/n9e:/app/data
     networks:
       - nginx-analytics
     depends_on:
@@ -262,8 +258,11 @@ services:
         condition: service_healthy
       victoriametrics:
         condition: service_healthy
+    # 修复启动命令 - 使用环境变量指定配置目录
+    command: >
+      sh -c "/app/n9e"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:17000/api/n9e/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:17000/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -292,6 +291,8 @@ services:
       nightingale:
         condition: service_healthy
     privileged: true
+    # 解决容器无法访问宿主机问题
+    pid: host
 
   # ========== 可选: 系统监控 ==========
   
@@ -327,7 +328,7 @@ volumes:
   redis_data:
     driver: local
   
-  # BI工具数据卷
+  # BI工具数据卷  
   grafana_data:
     driver: local
   postgres_data:
@@ -335,13 +336,16 @@ volumes:
   superset_data:
     driver: local
   
-  # DataEase数据卷
+  # DataEase v2.10.12数据卷
   dataease_mysql_data:
     driver: local
   dataease_data:
     driver: local
   dataease_logs:
     driver: local
+  dataease_cache:
+    driver: local
+  
   
   # 夜莺监控数据卷
   n9e_mysql_data:
