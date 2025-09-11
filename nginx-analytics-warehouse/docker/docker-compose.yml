@@ -261,12 +261,6 @@ services:
     # 修复启动命令 - 使用环境变量指定配置目录
     command: >
       sh -c "/app/n9e"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:17000/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
 
   # Categraf 数据采集器
   categraf:
@@ -288,8 +282,7 @@ services:
     networks:
       - nginx-analytics
     depends_on:
-      nightingale:
-        condition: service_healthy
+      - nightingale
     privileged: true
     # 解决容器无法访问宿主机问题
     pid: host
