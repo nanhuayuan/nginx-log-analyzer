@@ -1,0 +1,704 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Nginx请求头分析 - User-Agent、Referer等详细分析（字段名已修复）",
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT countDistinct(user_agent_string) as unique_user_agents FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-',\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "🌐 独立User-Agent数",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 200
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT countDistinct(referer_url) as unique_referers FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND referer_url != '' AND referer_url != '-',\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "🔗 独立Referer数",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 15
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT countIf(user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%') * 100.0 / count() as bot_percentage FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time),\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "🤖 机器人流量占比",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT countIf(user_agent_string = '' OR user_agent_string = '-') * 100.0 / count() as empty_ua_percentage FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time),\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "🚫 空User-Agent占比",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT user_agent_string as `User-Agent字符串`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)) as `占比(%)`, countIf(response_status_code >= '400') as `错误请求`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-' GROUP BY user_agent_string ORDER BY count() DESC LIMIT 20"
+        }
+      ],
+      "title": "🌐 TOP20 User-Agent分析",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT CASE WHEN user_agent_string LIKE '%Chrome%' THEN 'Chrome' WHEN user_agent_string LIKE '%Firefox%' THEN 'Firefox' WHEN user_agent_string LIKE '%Safari%' AND user_agent_string NOT LIKE '%Chrome%' THEN 'Safari' WHEN user_agent_string LIKE '%Edge%' THEN 'Edge' WHEN user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%' THEN 'Bot/Crawler' WHEN user_agent_string = '' OR user_agent_string = '-' THEN 'Empty' ELSE 'Other' END as `浏览器类型`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)) as `占比(%)`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY `浏览器类型` ORDER BY count() DESC"
+        }
+      ],
+      "title": "🖥️ 浏览器类型分析",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT referer_url as `Referer`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)) as `占比(%)`, countDistinct(client_ip) as `独立访客`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND referer_url != '' AND referer_url != '-' GROUP BY referer_url ORDER BY count() DESC LIMIT 20"
+        }
+      ],
+      "title": "🔗 TOP20 Referer来源分析",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 8,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT CASE WHEN referer_domain LIKE '%google.%' THEN 'Google搜索' WHEN referer_domain LIKE '%baidu.%' THEN '百度搜索' WHEN referer_domain LIKE '%bing.%' THEN 'Bing搜索' WHEN referer_domain LIKE '%weibo.%' THEN '微博' WHEN referer_domain LIKE '%qq.%' THEN 'QQ相关' WHEN referer_domain LIKE '%wechat%' OR referer_domain LIKE '%weixin%' THEN '微信' WHEN referer_domain = '' OR referer_domain = '-' THEN '直接访问' ELSE '其他来源' END as `来源类型`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)) as `占比(%)`, countDistinct(client_ip) as `独立访客` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY `来源类型` ORDER BY count() DESC"
+        }
+      ],
+      "title": "🌍 来源类型分析",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time, CASE WHEN user_agent_string LIKE '%Chrome%' THEN 'Chrome' WHEN user_agent_string LIKE '%Firefox%' THEN 'Firefox' WHEN user_agent_string LIKE '%Safari%' AND user_agent_string NOT LIKE '%Chrome%' THEN 'Safari' WHEN user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%' THEN 'Bot/Crawler' ELSE 'Other' END as browser_type, count() as requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time, browser_type ORDER BY time"
+        }
+      ],
+      "title": "📈 浏览器类型请求趋势",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time, countIf(user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%') as bot_requests, countIf(user_agent_string NOT LIKE '%bot%' AND user_agent_string NOT LIKE '%crawler%' AND user_agent_string NOT LIKE '%spider%') as human_requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time ORDER BY time"
+        }
+      ],
+      "title": "🤖 机器人vs人工访问趋势",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": [
+    "nginx",
+    "headers",
+    "user-agent",
+    "referer",
+    "analysis"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "grafana-clickhouse-datasource",
+          "value": "fexr755u22ku8b"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "数据源",
+        "multi": false,
+        "name": "DS_CLICKHOUSE",
+        "options": [],
+        "query": "grafana-clickhouse-datasource",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Nginx请求头分析",
+  "uid": "nginx_header_analysis_fixed",
+  "version": 1
+}

@@ -1,0 +1,415 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Nginx - 请求头性能关联分析",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "请求头性能概览",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          },
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-',\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "慢请求率（有请求头）",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2000
+              },
+              {
+                "color": "red",
+                "value": 5000
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT avg(total_request_duration) as avg_response_time FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-',\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "平均响应时间（有请求头）",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT countDistinct(user_agent_string) as unique_user_agents FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-',\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "User Agent类型统计",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n    multiIf(\n        user_agent_string LIKE '%Chrome%' AND user_agent_string NOT LIKE '%Edge%', 'Chrome',\n        user_agent_string LIKE '%Firefox%', 'Firefox',\n        user_agent_string LIKE '%Safari%' AND user_agent_string NOT LIKE '%Chrome%', 'Safari',\n        user_agent_string LIKE '%Edge%', 'Edge',\n        user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%', 'Bot',\n        'Other'\n    ) as browser_type,\n    count() as request_count,\n    avg(total_request_duration) as avg_duration,\n    quantile(0.95)(total_request_duration) as p95_duration,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND user_agent_string != '' AND user_agent_string != '-'\n    AND total_request_duration > 0\nGROUP BY browser_type\nHAVING count() >= 10\nORDER BY slow_rate DESC"
+        }
+      ],
+      "title": "浏览器性能关联",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n    multiIf(\n        user_agent_string LIKE '%Windows%', 'Windows',\n        user_agent_string LIKE '%Mac%' OR user_agent_string LIKE '%macOS%', 'macOS',\n        user_agent_string LIKE '%Linux%' AND user_agent_string NOT LIKE '%Android%', 'Linux',\n        user_agent_string LIKE '%Android%', 'Android',\n        user_agent_string LIKE '%iPhone%' OR user_agent_string LIKE '%iOS%', 'iOS',\n        'Other'\n    ) as os_type,\n    count() as request_count,\n    avg(total_request_duration) as avg_duration,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate,\n    quantile(0.95)(total_request_duration) as p95_duration\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND user_agent_string != '' AND user_agent_string != '-'\n    AND total_request_duration > 0\n    AND NOT (user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%')\nGROUP BY os_type\nHAVING count() >= 10\nORDER BY slow_rate DESC"
+        }
+      ],
+      "title": "操作系统性能分析",
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": [
+    "nginx",
+    "headers",
+    "performance",
+    "correlation"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "ClickHouse",
+          "value": "ClickHouse"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "数据源",
+        "multi": false,
+        "name": "DS_CLICKHOUSE",
+        "options": [],
+        "query": "grafana-clickhouse-datasource",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "3000",
+          "value": "3000"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "slow_threshold",
+        "options": [
+          {
+            "selected": false,
+            "text": "1000",
+            "value": "1000"
+          },
+          {
+            "selected": false,
+            "text": "2000",
+            "value": "2000"
+          },
+          {
+            "selected": true,
+            "text": "3000",
+            "value": "3000"
+          },
+          {
+            "selected": false,
+            "text": "5000",
+            "value": "5000"
+          },
+          {
+            "selected": false,
+            "text": "10000",
+            "value": "10000"
+          }
+        ],
+        "query": "1000,2000,3000,5000,10000",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "请求头性能关联分析",
+  "uid": "nginx-header-performance-correlation",
+  "version": 1,
+  "weekStart": ""
+}

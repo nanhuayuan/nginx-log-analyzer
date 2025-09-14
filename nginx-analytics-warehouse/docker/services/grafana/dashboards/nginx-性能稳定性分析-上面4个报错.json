@@ -1,0 +1,516 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Nginx性能稳定性分析 - 响应时间分布、稳定性指标等",
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT (quantile(0.95)(total_request_duration) - quantile(0.50)(total_request_duration)) / quantile(0.50)(total_request_duration) * 100 as stability_coefficient FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time),\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "📊 响应时间稳定系数",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT stddevSamp(total_request_duration) as response_time_stddev FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time),\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "📏 响应时间标准差",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 99.5
+              },
+              {
+                "color": "red",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT countIf(total_request_duration <= 5) * 100.0 / count() as availability_5s FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time),\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "⚡ 5秒内响应率",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 98
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          },
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT countIf(response_status_code < '400') * 100.0 / count() as success_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time),\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "title": "✅ 成功率",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT '极快(<100ms)' as `响应时间段`, countIf(total_request_duration < 0.1) as `请求数`, countIf(total_request_duration < 0.1) * 100.0 / count() as `占比(%)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) UNION ALL SELECT '快速(100-500ms)' as `响应时间段`, countIf(total_request_duration >= 0.1 AND total_request_duration < 0.5) as `请求数`, countIf(total_request_duration >= 0.1 AND total_request_duration < 0.5) * 100.0 / count() as `占比(%)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) UNION ALL SELECT '正常(500ms-1s)' as `响应时间段`, countIf(total_request_duration >= 0.5 AND total_request_duration < 1) as `请求数`, countIf(total_request_duration >= 0.5 AND total_request_duration < 1) * 100.0 / count() as `占比(%)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) UNION ALL SELECT '慢速(1-3s)' as `响应时间段`, countIf(total_request_duration >= 1 AND total_request_duration < 3) as `请求数`, countIf(total_request_duration >= 1 AND total_request_duration < 3) * 100.0 / count() as `占比(%)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) UNION ALL SELECT '极慢(>3s)' as `响应时间段`, countIf(total_request_duration >= 3) as `请求数`, countIf(total_request_duration >= 3) * 100.0 / count() as `占比(%)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) ORDER BY `请求数` DESC"
+        }
+      ],
+      "title": "⏱️ 响应时间分布统计",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT 'P50' as `分位数`, quantile(0.50)(total_request_duration * 1000) as `响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) UNION ALL SELECT 'P75' as `分位数`, quantile(0.75)(total_request_duration * 1000) as `响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) UNION ALL SELECT 'P90' as `分位数`, quantile(0.90)(total_request_duration * 1000) as `响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) UNION ALL SELECT 'P95' as `分位数`, quantile(0.95)(total_request_duration * 1000) as `响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) UNION ALL SELECT 'P99' as `分位数`, quantile(0.99)(total_request_duration * 1000) as `响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) ORDER BY `响应时间(ms)` ASC"
+        }
+      ],
+      "title": "📈 响应时间分位数分析",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time, avg(total_request_duration * 1000) as avg_response_time, quantile(0.50)(total_request_duration * 1000) as p50_response_time, quantile(0.95)(total_request_duration * 1000) as p95_response_time, quantile(0.99)(total_request_duration * 1000) as p99_response_time FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time ORDER BY time"
+        }
+      ],
+      "title": "📊 响应时间稳定性趋势 - 平均/P50/P95/P99",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": [
+    "nginx",
+    "performance",
+    "stability",
+    "analysis"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "grafana-clickhouse-datasource",
+          "value": "fexr755u22ku8b"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "数据源",
+        "multi": false,
+        "name": "DS_CLICKHOUSE",
+        "options": [],
+        "query": "grafana-clickhouse-datasource",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Nginx性能稳定性分析",
+  "uid": "nginx_performance_stability",
+  "version": 1
+}

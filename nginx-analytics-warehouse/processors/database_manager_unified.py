@@ -51,90 +51,121 @@ class DatabaseManagerUnified:
         # DDL文件路径配置
         self.ddl_dir = Path(__file__).parent.parent / "ddl"
         
-        # 12个完整物化视图配置 - v4.0完整版
+        # 17个完整物化视图配置 - v5.0增强版支持全维度分析
         self.materialized_views = self._initialize_view_definitions()
         
     def _initialize_view_definitions(self) -> Dict[str, Dict[str, Any]]:
         """
-        初始化12个物化视图定义 - v4.0完整版架构设计
+        初始化17个物化视图定义 - v5.0增强版支持全维度分析
         
         Returns:
             Dict: 物化视图配置字典
         """
         return {
-            # 原有7个物化视图
-            'mv_api_performance_hourly': {
-                'target_table': 'ads_api_performance_analysis',
-                'description': '01.接口性能分析 - 支持平台+入口+接口多维度分析',
+            # 核心物化视图 (1-13) - 升级版本支持v3表结构
+            'mv_api_performance_hourly_v3': {
+                'target_table': 'ads_api_performance_analysis_v3',
+                'description': '01.接口性能分析v3 - 支持平台入口下钻、租户权限隔离',
                 'priority': 1,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
-            'mv_service_level_hourly': {
-                'target_table': 'ads_service_level_analysis',
-                'description': '02.服务层级分析 - 支持微服务健康度监控',
+            'mv_service_level_hourly_v3': {
+                'target_table': 'ads_service_level_analysis_v3',
+                'description': '02.服务层级分析v3 - 支持微服务架构、多环境监控',
                 'priority': 2,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
             'mv_slow_request_hourly': {
                 'target_table': 'ads_slow_request_analysis',
                 'description': '03.慢请求分析 - 支持瓶颈类型和根因定位',
                 'priority': 2,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
             'mv_status_code_hourly': {
                 'target_table': 'ads_status_code_analysis',
                 'description': '04.状态码统计 - 支持错误分类和影响评估',
                 'priority': 2,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
             'mv_time_dimension_hourly': {
                 'target_table': 'ads_time_dimension_analysis',
                 'description': '05.时间维度分析 - 支持QPS趋势和性能监控',
                 'priority': 1,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
             'mv_error_analysis_hourly': {
-                'target_table': 'ads_error_analysis_detailed',
-                'description': '06.错误码下钻分析 - 支持精准错误定位和根因分析',
+                'target_table': 'ads_error_analysis_detailed_v3',
+                'description': '06.错误码下钻分析v3 - 支持错误链路追踪、多维度错误分析',
                 'priority': 1,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
             'mv_request_header_hourly': {
                 'target_table': 'ads_request_header_analysis',
                 'description': '07.请求头分析 - 支持客户端行为和用户体验分析',
                 'priority': 3,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
-            # 新增5个物化视图 - 填补数据空白
             'mv_api_error_analysis_hourly': {
                 'target_table': 'ads_api_error_analysis',
                 'description': '08.API错误分析 - 错误类型分类与影响分析',
                 'priority': 2,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
             'mv_ip_source_analysis_hourly': {
                 'target_table': 'ads_ip_source_analysis',
                 'description': '09.IP来源分析 - 风险评分与异常行为检测',
                 'priority': 3,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
             'mv_service_stability_analysis_hourly': {
                 'target_table': 'ads_service_stability_analysis',
                 'description': '10.服务稳定性分析 - SLA计算与稳定性评级',
                 'priority': 1,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
             'mv_header_performance_correlation_hourly': {
                 'target_table': 'ads_header_performance_correlation',
                 'description': '11.请求头性能关联分析 - 用户代理与性能关联',
                 'priority': 3,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
             },
             'mv_comprehensive_report_hourly': {
                 'target_table': 'ads_comprehensive_report',
                 'description': '12.综合报告 - 系统健康评分与容量分析',
                 'priority': 1,
-                'dependencies': ['dwd_nginx_enriched_v2']
+                'dependencies': ['dwd_nginx_enriched_v3']
+            },
+            
+            # 新增业务主题物化视图 (13-17) - v5.0新特性
+            'mv_platform_entry_analysis_hourly': {
+                'target_table': 'ads_platform_entry_analysis',
+                'description': '13.平台入口下钻分析 - 核心下钻维度，支持平台+入口组合分析',
+                'priority': 1,
+                'dependencies': ['dwd_nginx_enriched_v3']
+            },
+            'mv_business_process_analysis_hourly': {
+                'target_table': 'ads_business_process_analysis',
+                'description': '14.业务流程分析 - 业务流程监控、用户旅程追踪',
+                'priority': 2,
+                'dependencies': ['dwd_nginx_enriched_v3']
+            },
+            'mv_user_behavior_analysis_hourly': {
+                'target_table': 'ads_user_behavior_analysis',
+                'description': '15.用户行为分析 - 用户旅程、行为模式、转化分析',
+                'priority': 2,
+                'dependencies': ['dwd_nginx_enriched_v3']
+            },
+            'mv_security_monitoring_analysis_hourly': {
+                'target_table': 'ads_security_monitoring_analysis',
+                'description': '16.安全监控分析 - 安全威胁检测、风险评估、攻击分析',
+                'priority': 1,
+                'dependencies': ['dwd_nginx_enriched_v3']
+            },
+            'mv_tenant_permission_analysis_hourly': {
+                'target_table': 'ads_tenant_permission_analysis',
+                'description': '17.租户权限分析 - 多租户权限监控、合规性分析',
+                'priority': 1,
+                'dependencies': ['dwd_nginx_enriched_v3']
             }
         }
     
@@ -373,17 +404,21 @@ class DatabaseManagerUnified:
         }
         
         try:
-            # 验证基础表存在
+            # 验证基础表存在 - v5.0增强版架构
             essential_tables = [
                 'ods_nginx_raw',
-                'dwd_nginx_enriched_v2',
-                'ads_api_performance_analysis',
-                'ads_service_level_analysis',
+                'dwd_nginx_enriched_v3',
+                'ads_api_performance_analysis_v3',
+                'ads_service_level_analysis_v3',
                 'ads_slow_request_analysis',
                 'ads_status_code_analysis',
                 'ads_time_dimension_analysis',
-                'ads_error_analysis_detailed',
-                'ads_request_header_analysis'
+                'ads_error_analysis_detailed_v3',
+                'ads_request_header_analysis',
+                # v5.0核心新增表
+                'ads_platform_entry_analysis',
+                'ads_security_monitoring_analysis',
+                'ads_tenant_permission_analysis'
             ]
             
             for table in essential_tables:
@@ -432,22 +467,33 @@ class DatabaseManagerUnified:
                 'architecture_health': 'unknown'
             }
             
-            # 检查表状态
-            for table_name in ['ods_nginx_raw', 'dwd_nginx_enriched_v2']:
+            # 检查基础表状态 - v5.0增强版
+            for table_name in ['ods_nginx_raw', 'dwd_nginx_enriched_v3']:
                 status['tables'][table_name] = {
                     'exists': self._table_exists(table_name),
                     'record_count': self._get_table_count(table_name) if self._table_exists(table_name) else 0
                 }
             
-            # 检查ADS表状态
+            # 检查ADS表状态 - v5.0全量18个主题表
             ads_tables = [
-                'ads_api_performance_analysis',
-                'ads_service_level_analysis', 
+                'ads_api_performance_analysis_v3',
+                'ads_service_level_analysis_v3', 
                 'ads_slow_request_analysis',
                 'ads_status_code_analysis',
                 'ads_time_dimension_analysis',
-                'ads_error_analysis_detailed',
-                'ads_request_header_analysis'
+                'ads_error_analysis_detailed_v3',
+                'ads_request_header_analysis',
+                'ads_api_error_analysis',
+                'ads_ip_source_analysis',
+                'ads_service_stability_analysis',
+                'ads_header_performance_correlation',
+                'ads_comprehensive_report',
+                # v5.0新增业务主题表
+                'ads_platform_entry_analysis',
+                'ads_business_process_analysis',
+                'ads_user_behavior_analysis',
+                'ads_security_monitoring_analysis',
+                'ads_tenant_permission_analysis'
             ]
             
             for table_name in ads_tables:
@@ -602,7 +648,7 @@ class DatabaseManagerUnified:
         """交互式菜单"""
         while True:
             print("\n" + "="*80)
-            print("🏛️   ClickHouse 统一数据库管理工具 v2.0")
+            print("🏛️   ClickHouse 统一数据库管理工具 v5.0 - 增强版")
             print("="*80)
             print("1. 🚀 初始化完整架构（创建所有表和物化视图）")
             print("2. 📊 检查架构状态（显示表和视图状态）") 
@@ -611,11 +657,13 @@ class DatabaseManagerUnified:
             print("5. 🧹 清理所有数据（保留表结构，清空数据）")
             print("6. 📋 单独执行DDL文件")
             print("7. 🔧 创建单个物化视图")
+            print("8. 🔄 从v2架构升级到v5架构（兼容性迁移）")
+            print("9. 📋 检查v2和v5架构兼容性状态")
             print("0. 👋 退出")
             print("-"*80)
             
             try:
-                choice = input("请选择操作 [0-7]: ").strip()
+                choice = input("请选择操作 [0-9]: ").strip()
                 
                 if choice == '0':
                     print("👋 再见！")
@@ -647,7 +695,10 @@ class DatabaseManagerUnified:
                     
                 elif choice == '7':
                     self._create_single_materialized_view()
-                    
+                elif choice == '8':
+                    self._upgrade_from_v2_to_v5()
+                elif choice == '9':
+                    self._check_compatibility_status()
                 else:
                     print("❌ 无效选择，请重新输入")
                     
@@ -844,7 +895,7 @@ class DatabaseManagerUnified:
         ]
         
         try:
-            query = f"DESCRIBE TABLE {self.database}.dwd_nginx_enriched_v2"
+            query = f"DESCRIBE TABLE {self.database}.dwd_nginx_enriched_v3"
             result = self.client.query(query)
             existing_fields = [row[0] for row in result.result_rows]
             
@@ -857,6 +908,182 @@ class DatabaseManagerUnified:
         
         return issues
     
+    def _upgrade_from_v2_to_v5(self):
+        """从v2架构升级到v5架构"""
+        print("\n🔄 开始从v2架构升级到v5架构...")
+        
+        if not self.connect():
+            return
+            
+        try:
+            # 1. 检查v2表是否存在
+            v2_table = 'dwd_nginx_enriched_v2'
+            if not self._table_exists(v2_table):
+                print(f"❌ 未发现v2表 {v2_table}，无法执行升级")
+                return
+                
+            v2_count = self._get_table_count(v2_table)
+            print(f"📊 发现v2表 {v2_table}，包含 {v2_count:,} 条记录")
+            
+            # 2. 创建v5新架构
+            print("\n📋 创建v5增强架构...")
+            init_result = self.initialize_complete_architecture()
+            if not init_result['success']:
+                print("❌ v5架构创建失败")
+                return
+                
+            print("✅ v5架构创建成功")
+            
+            # 3. 数据兼容性检查
+            print("\n🔍 执行数据兼容性检查...")
+            compatibility_result = self._check_field_compatibility(v2_table, 'dwd_nginx_enriched_v3')
+            
+            if compatibility_result['compatible']:
+                print("✅ 字段结构兼容，支持数据迁移")
+            else:
+                print("⚠️  检测到字段差异，将使用智能填充")
+                
+            # 4. 提供迁移选择
+            print("\n📝 升级完成选项:")
+            print("1. v2和v5架构并存 (推荐，零风险)")
+            print("2. 执行数据迁移 (将v2数据迁移到v3表)")
+            print("3. 仅创建v5架构，保持v2不变")
+            
+            choice = input("请选择 [1-3]: ").strip()
+            
+            if choice == '2':
+                confirm = input("⚠️  确认执行数据迁移？这将消耗较多时间 [y/N]: ").strip().lower()
+                if confirm == 'y':
+                    self._migrate_data_v2_to_v3(v2_table)
+                else:
+                    print("✅ 已取消数据迁移，v2和v5架构并存")
+            else:
+                print("✅ v5架构创建完成，与v2架构并存")
+                
+        except Exception as e:
+            self.logger.error(f"架构升级失败: {str(e)}")
+            print(f"❌ 升级失败: {str(e)}")
+        finally:
+            self.close()
+            
+    def _check_compatibility_status(self):
+        """检查v2和v5架构兼容性状态"""
+        print("\n📋 检查v2和v5架构兼容性状态...")
+        
+        if not self.connect():
+            return
+            
+        try:
+            status_report = {
+                'v2_architecture': {'exists': False, 'tables': {}, 'record_counts': {}},
+                'v5_architecture': {'exists': False, 'tables': {}, 'record_counts': {}},
+                'compatibility': {'overall_status': 'unknown', 'details': []}
+            }
+            
+            # 检查v2架构
+            print("\n🔍 检查v2架构状态...")
+            v2_tables = ['dwd_nginx_enriched_v2', 'ads_api_performance_analysis', 'ads_service_level_analysis']
+            v2_exists = 0
+            
+            for table in v2_tables:
+                exists = self._table_exists(table)
+                count = self._get_table_count(table) if exists else 0
+                status_report['v2_architecture']['tables'][table] = exists
+                status_report['v2_architecture']['record_counts'][table] = count
+                if exists:
+                    v2_exists += 1
+                    print(f"   ✅ {table}: {count:,} 条记录")
+                else:
+                    print(f"   ❌ {table}: 不存在")
+                    
+            status_report['v2_architecture']['exists'] = v2_exists > 0
+            
+            # 检查v5架构
+            print("\n🔍 检查v5架构状态...")
+            v5_tables = ['dwd_nginx_enriched_v3', 'ads_api_performance_analysis_v3', 'ads_platform_entry_analysis']
+            v5_exists = 0
+            
+            for table in v5_tables:
+                exists = self._table_exists(table)
+                count = self._get_table_count(table) if exists else 0
+                status_report['v5_architecture']['tables'][table] = exists
+                status_report['v5_architecture']['record_counts'][table] = count
+                if exists:
+                    v5_exists += 1
+                    print(f"   ✅ {table}: {count:,} 条记录")
+                else:
+                    print(f"   ❌ {table}: 不存在")
+                    
+            status_report['v5_architecture']['exists'] = v5_exists > 0
+            
+            # 兼容性分析
+            print("\n📊 兼容性状态总结:")
+            if status_report['v2_architecture']['exists'] and status_report['v5_architecture']['exists']:
+                print("✅ v2和v5架构并存，支持平滑迁移")
+                status_report['compatibility']['overall_status'] = 'coexist'
+            elif status_report['v5_architecture']['exists']:
+                print("✅ v5架构已就绪，可以开始使用新功能")
+                status_report['compatibility']['overall_status'] = 'v5_ready'
+            elif status_report['v2_architecture']['exists']:
+                print("⚠️  仅有v2架构，建议升级到v5以获得增强功能")
+                status_report['compatibility']['overall_status'] = 'v2_only'
+            else:
+                print("❌ 未发现任何架构，请先初始化数据库")
+                status_report['compatibility']['overall_status'] = 'none'
+                
+            return status_report
+            
+        except Exception as e:
+            self.logger.error(f"兼容性检查失败: {str(e)}")
+            print(f"❌ 检查失败: {str(e)}")
+            return None
+        finally:
+            self.close()
+
+    def _check_field_compatibility(self, v2_table: str, v3_table: str) -> Dict[str, Any]:
+        """检查v2和v3表的字段兼容性"""
+        try:
+            # 获取v2表字段
+            v2_query = f"DESCRIBE TABLE {self.database}.{v2_table}"
+            v2_result = self.client.query(v2_query)
+            v2_fields = {row[0]: row[1] for row in v2_result.result_rows}
+            
+            # 获取v3表字段  
+            v3_query = f"DESCRIBE TABLE {self.database}.{v3_table}"
+            v3_result = self.client.query(v3_query)
+            v3_fields = {row[0]: row[1] for row in v3_result.result_rows}
+            
+            # 兼容性分析
+            common_fields = set(v2_fields.keys()) & set(v3_fields.keys())
+            v2_only = set(v2_fields.keys()) - set(v3_fields.keys()) 
+            v3_only = set(v3_fields.keys()) - set(v2_fields.keys())
+            
+            return {
+                'compatible': len(v2_only) == 0,  # v2字段是否都包含在v3中
+                'common_fields': list(common_fields),
+                'v2_only_fields': list(v2_only),
+                'v3_new_fields': list(v3_only),
+                'compatibility_rate': len(common_fields) / len(v2_fields) if v2_fields else 0
+            }
+            
+        except Exception as e:
+            self.logger.error(f"字段兼容性检查失败: {str(e)}")
+            return {'compatible': False, 'error': str(e)}
+
+    def _migrate_data_v2_to_v3(self, v2_table: str):
+        """迁移v2数据到v3表"""
+        print(f"\n🔄 开始数据迁移: {v2_table} → dwd_nginx_enriched_v3")
+        
+        try:
+            # 这里可以实现数据迁移逻辑
+            # 由于数据量可能很大，建议分批处理
+            print("⚠️  数据迁移功能正在开发中...")
+            print("💡 建议当前保持v2和v5架构并存，通过ETL逐步切换")
+            
+        except Exception as e:
+            self.logger.error(f"数据迁移失败: {str(e)}")
+            print(f"❌ 数据迁移失败: {str(e)}")
+
     def _generate_initialization_report(self, results: Dict[str, Any]):
         """生成初始化报告"""
         report_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

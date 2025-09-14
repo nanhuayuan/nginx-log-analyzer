@@ -1,0 +1,1539 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Nginx - self_04_status_analyzer.py - HTTP状态码分析和统计",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "状态码分析概览",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT\n                                toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n                                (countIf(response_status_code IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) as value\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time)\n                            GROUP BY time\n                            ORDER BY time"
+        }
+      ],
+      "title": "成功率 (Success Rate)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT\n                                toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n                                (countIf(response_status_code >= '400' AND response_status_code < '500') * 100.0 / count()) as value\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time)\n                            GROUP BY time\n                            ORDER BY time"
+        }
+      ],
+      "title": "客户端错误率 (4XX)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT\n                                toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n                                (countIf(response_status_code >= '500') * 100.0 / count()) as value\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time)\n                            GROUP BY time\n                            ORDER BY time"
+        }
+      ],
+      "title": "服务器错误率 (5XX)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 10000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT\n                                toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n                                countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) as value\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time)\n                            GROUP BY time\n                            ORDER BY time"
+        }
+      ],
+      "title": "总错误数量",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 6,
+      "panels": [],
+      "title": "状态码趋势分析",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "2XX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "3XX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "4XX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "5XX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT\n                                    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n                                    countIf(response_status_code >= '200' AND response_status_code < '300') / $__interval_s as status_2xx,\n                                    countIf(response_status_code >= '300' AND response_status_code < '400') / $__interval_s as status_3xx,\n                                    countIf(response_status_code >= '400' AND response_status_code < '500') / $__interval_s as status_4xx,\n                                    countIf(response_status_code >= '500') / $__interval_s as status_5xx\n                                FROM nginx_analytics.dwd_nginx_enriched_v3\n                                WHERE $__timeFilter(log_time)\n                                GROUP BY time\n                                ORDER BY time"
+        }
+      ],
+      "title": "HTTP状态码趋势",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": ""
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": ""
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT\n                                    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n                                    (countIf(response_status_code IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) as success_rate,\n                                    (countIf(response_status_code >= '400' AND response_status_code < '500') * 100.0 / count()) as error_4xx_rate,\n                                    (countIf(response_status_code >= '500') * 100.0 / count()) as error_5xx_rate\n                                FROM nginx_analytics.dwd_nginx_enriched_v3\n                                WHERE $__timeFilter(log_time)\n                                GROUP BY time\n                                ORDER BY time"
+        }
+      ],
+      "title": "错误率趋势",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 9,
+      "panels": [],
+      "title": "详细状态码分析",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status_code"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "状态码"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "request_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "请求数量"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "percentage"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "占比(%)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_response_time"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "平均响应时间(ms)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status_type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "类型"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 20
+      },
+      "id": 10,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": ""
+          }
+        ]
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n                                response_status_code as status_code,\n                                count() as request_count,\n                                (count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time))) as percentage,\n                                avg(total_request_duration) as avg_response_time,\n                                CASE\n                                    WHEN response_status_code >= '200' AND response_status_code < '300' THEN 'Success'\n                                    WHEN response_status_code >= '300' AND response_status_code < '400' THEN 'Redirect'\n                                    WHEN response_status_code >= '400' AND response_status_code < '500' THEN 'Client Error'\n                                    WHEN response_status_code >= '500' THEN 'Server Error'\n                                    ELSE 'Unknown'\n                                END as status_type\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time)\n                            GROUP BY response_status_code\n                            ORDER BY request_count DESC\n                            LIMIT 20"
+        }
+      ],
+      "title": "详细HTTP状态码统计",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            }
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 8,
+        "y": 20
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n                                CASE\n                                    WHEN response_status_code >= '200' AND response_status_code < '300' THEN '2XX Success'\n                                    WHEN response_status_code >= '300' AND response_status_code < '400' THEN '3XX Redirect'\n                                    WHEN response_status_code >= '400' AND response_status_code < '500' THEN '4XX Client Error'\n                                    WHEN response_status_code >= '500' THEN '5XX Server Error'\n                                    ELSE 'Other'\n                                END as status_category,\n                                count() as request_count\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time)\n                            GROUP BY status_category\n                            ORDER BY request_count DESC"
+        }
+      ],
+      "title": "状态码分布饼图",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "platform"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "平台"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total_requests"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "总请求数"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "错误数"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_rate"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "错误率(%)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_response_time"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "平均响应时间(ms)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unique_ips"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "独立IP数"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 16,
+        "y": 20
+      },
+      "id": 12,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": ""
+          }
+        ]
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n                                platform,\n                                count() as total_requests,\n                                countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) as error_count,\n                                (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) as error_rate,\n                                avg(total_request_duration) as avg_response_time,\n                                uniq(client_ip) as unique_ips\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time) AND length(platform) > 0\n                            GROUP BY platform\n                            ORDER BY error_rate DESC"
+        }
+      ],
+      "title": "平台错误分析",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 13,
+      "panels": [],
+      "title": "问题接口分析",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "uri"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "接口路径"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status_code"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "状态码"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "错误次数"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_response_time"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "平均响应时间(ms)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "top_client_ips"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TOP5客户端IP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "platform"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "平台"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_description"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "错误描述"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "id": 14,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": ""
+          }
+        ]
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n                                request_uri_normalized as uri,\n                                response_status_code as status_code,\n                                count() as error_count,\n                                avg(total_request_duration) as avg_response_time,\n                                groupUniqArray(5)(client_ip) as top_client_ips,\n                                any(platform) as platform,\n                                CASE\n                                    WHEN response_status_code = '404' THEN 'Not Found'\n                                    WHEN response_status_code = '403' THEN 'Forbidden'\n                                    WHEN response_status_code = '401' THEN 'Unauthorized'\n                                    WHEN response_status_code = '400' THEN 'Bad Request'\n                                    WHEN response_status_code = '500' THEN 'Internal Server Error'\n                                    WHEN response_status_code = '502' THEN 'Bad Gateway'\n                                    WHEN response_status_code = '503' THEN 'Service Unavailable'\n                                    WHEN response_status_code = '504' THEN 'Gateway Timeout'\n                                    ELSE 'Other Error'\n                                END as error_description\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time)\n                                AND response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')\n                            GROUP BY request_uri_normalized, response_status_code\n                            HAVING count() > 5\n                            ORDER BY error_count DESC\n                            LIMIT 20"
+        }
+      ],
+      "title": "高错误接口详情",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ip_address"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IP地址"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total_requests"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "总请求数"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "错误数"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_rate"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "错误率(%)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unique_endpoints"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "访问接口数"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status_samples"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "状态码样本"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "risk_score"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "风险评分"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "risk_level"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "风险等级"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
+      "id": 15,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": ""
+          }
+        ]
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n                                client_ip as ip_address,\n                                count() as total_requests,\n                                countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) as error_count,\n                                (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) as error_rate,\n                                uniq(request_uri_normalized) as unique_endpoints,\n                                arraySlice(groupArray(response_status_code), 1, 5) as status_samples,\n                                (countIf(response_status_code >= '400') * 1 +\n                                 if(count() > 1000, 2, 0) +\n                                 if((countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 20, 3, 0) +\n                                 if(countIf(response_status_code >= '500') > 0, 2, 0)) as risk_score,\n                                CASE\n                                    WHEN countIf(response_status_code >= '500') > 10 OR (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 50 THEN 'High Risk'\n                                    WHEN countIf(response_status_code >= '400') > 20 OR count() > 1000 THEN 'Medium Risk'\n                                    ELSE 'Low Risk'\n                                END as risk_level\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time)\n                            GROUP BY client_ip\n                            HAVING countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) > 10\n                            ORDER BY risk_score DESC\n                            LIMIT 15"
+        }
+      ],
+      "title": "异常IP分析",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 16,
+      "panels": [],
+      "title": "服务分类分析",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "api_category"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "API类别"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total_requests"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "总请求数"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "错误数"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_rate"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "错误率(%)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "server_errors"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "5XX错误"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "client_errors"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "4XX错误"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unique_ips"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "独立IP数"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "health_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "健康状态"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
+      "id": 17,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": ""
+          }
+        ]
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n                                api_category,\n                                count() as total_requests,\n                                countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) as error_count,\n                                (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) as error_rate,\n                                countIf(response_status_code >= '500') as server_errors,\n                                countIf(response_status_code >= '400' AND response_status_code < '500') as client_errors,\n                                uniq(client_ip) as unique_ips,\n                                CASE\n                                    WHEN (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 10 AND count() > 1000 THEN 'Critical'\n                                    WHEN (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 5 OR countIf(response_status_code >= '500') > 50 THEN 'Warning'\n                                    ELSE 'Normal'\n                                END as health_status\n                            FROM nginx_analytics.dwd_nginx_enriched_v3\n                            WHERE $__timeFilter(log_time) AND length(api_category) > 0\n                            GROUP BY api_category\n                            ORDER BY error_rate DESC"
+        }
+      ],
+      "title": "API类别错误统计",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 41
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "timeseries",
+          "refId": "A",
+          "rawSql": "SELECT\n                                    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n                                    api_category,\n                                    (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) as error_rate\n                                FROM nginx_analytics.dwd_nginx_enriched_v3\n                                WHERE $__timeFilter(log_time) AND length(api_category) > 0\n                                GROUP BY time, api_category\n                                HAVING count() > 10\n                                ORDER BY time, api_category"
+        }
+      ],
+      "title": "API类别错误率趋势",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": [
+    "nginx",
+    "response_status_code",
+    "error",
+    "monitoring"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "grafana-clickhouse-datasource",
+          "value": "fexr755u22ku8b"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "数据源",
+        "multi": false,
+        "name": "DS_CLICKHOUSE",
+        "options": [],
+        "query": "grafana-clickhouse-datasource",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Nginx - 状态码统计分析",
+  "uid": "nginx-status-code-analysis",
+  "version": 1,
+  "weekStart": ""
+}

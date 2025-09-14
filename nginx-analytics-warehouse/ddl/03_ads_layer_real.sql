@@ -1,67 +1,138 @@
 -- ==========================================
--- ADS层 - 对应Self目录的12个分析主题
--- 基于你的实际需求设计
+-- ADS增强层 v3.0 - 全维度分析主题表
+-- 基于工作介绍需求：支持平台入口下钻、错误链路分析、权限隔离
+-- 新增：租户权限、业务流程、安全监控、用户行为等15个主题
 -- ==========================================
 
--- 1. 对应 01.接口性能分析.xlsx
-CREATE TABLE IF NOT EXISTS nginx_analytics.ads_api_performance_analysis (
+-- 1. 对应 01.接口性能分析.xlsx - 增强版支持全维度下钻
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_api_performance_analysis_v3 (
     stat_time DateTime,                              -- 统计时间
-    time_granularity LowCardinality(String),         -- hour/day/week
-    platform LowCardinality(String),                 -- 平台维度
+    time_granularity LowCardinality(String),         -- minute/hour/day/week/month
+    
+    -- 权限维度(核心)
+    tenant_code LowCardinality(String),              -- 租户代码
+    team_code LowCardinality(String),                -- 团队代码
+    environment LowCardinality(String),              -- 环境标识
+    
+    -- 平台入口维度(核心下钻维度)
+    platform LowCardinality(String),                 -- 平台类型
+    platform_category LowCardinality(String),        -- 平台分类
     access_type LowCardinality(String),              -- 接入方式
+    access_entry_point LowCardinality(String),       -- 访问入口
+    client_channel LowCardinality(String),           -- 客户端渠道
+    client_type LowCardinality(String),              -- 客户端类型
+    
+    -- API业务维度(核心下钻维度)
     api_path String,                                 -- 接口路径
-    api_module LowCardinality(String),               -- 功能模块
     api_category LowCardinality(String),             -- 接口分类
+    api_subcategory LowCardinality(String),          -- 接口子分类
+    api_module LowCardinality(String),               -- 功能模块
+    api_version LowCardinality(String),              -- API版本
     business_domain LowCardinality(String),          -- 业务域
+    business_subdomain LowCardinality(String),       -- 业务子域
+    business_operation_type LowCardinality(String),  -- 业务操作类型
     
-    -- 请求量指标
-    total_requests UInt64,
-    unique_clients UInt64,
-    qps Float64,
+    -- 请求量指标(基础)
+    total_requests UInt64,                           -- 总请求数
+    unique_clients UInt64,                           -- 独特客户端数
+    unique_users UInt64,                             -- 独特用户数
+    unique_sessions UInt64,                          -- 独特会话数
+    qps Float64,                                     -- 每秒请求数
+    peak_qps Float64,                                -- 峰值每秒请求数
+    concurrent_users Float64,                        -- 并发用户数
     
-    -- 性能指标（对应Self分析）
+    -- 性能指标详细分解
     avg_response_time Float64,                       -- 平均响应时间
-    p50_response_time Float64,
-    p90_response_time Float64,
-    p95_response_time Float64,
-    p99_response_time Float64,
-    max_response_time Float64,
+    median_response_time Float64,                    -- 中位数响应时间
+    p50_response_time Float64,                       -- 50%分位数
+    p90_response_time Float64,                       -- 90%分位数
+    p95_response_time Float64,                       -- 95%分位数
+    p99_response_time Float64,                       -- 99%分位数
+    p999_response_time Float64,                      -- 99.9%分位数
+    max_response_time Float64,                       -- 最大响应时间
+    min_response_time Float64,                       -- 最小响应时间
+    response_time_std Float64,                       -- 响应时间标准差
     
-    -- 成功率指标
-    success_requests UInt64,
-    error_requests UInt64,
-    success_rate Float64,
-    error_rate Float64,
+    -- 成功率和错误分析
+    success_requests UInt64,                         -- 成功请求数
+    error_requests UInt64,                           -- 错误请求数
+    timeout_requests UInt64,                         -- 超时请求数
+    success_rate Float64,                            -- 成功率
+    error_rate Float64,                              -- 错误率
+    timeout_rate Float64,                            -- 超时率
     business_success_rate Float64,                   -- 业务成功率
+    availability Float64,                            -- 可用性
+    reliability Float64,                             -- 可靠性
     
-    -- 慢请求分析
-    slow_requests UInt64,                            -- >3s
-    very_slow_requests UInt64,                       -- >10s
-    slow_rate Float64,
-    very_slow_rate Float64,
+    -- 慢请求分析(多级别)
+    slow_requests UInt64,                            -- 慢请求(>3s)
+    very_slow_requests UInt64,                       -- 超慢请求(>10s)
+    extremely_slow_requests UInt64,                  -- 极慢请求(>30s)
+    slow_rate Float64,                               -- 慢请求率
+    very_slow_rate Float64,                          -- 超慢请求率
+    extremely_slow_rate Float64,                     -- 极慢请求率
     
     -- 用户体验指标
-    apdex_score Float64,                             -- 用户体验指数
-    user_satisfaction_score Float64,                 -- 用户满意度
+    apdex_score Float64,                             -- Apdex指数(0-1)
+    user_satisfaction_score Float64,                 -- 用户满意度(0-100)
+    performance_score Float64,                       -- 性能评分(0-100)
+    user_experience_level LowCardinality(String),    -- 体验等级(Excellent/Good/Fair/Poor)
     
-    -- 业务价值权重
-    business_value_score UInt8,
-    importance_level LowCardinality(String),
+    -- 业务价值和重要性
+    business_value_score Float64,                    -- 业务价值评分
+    importance_level LowCardinality(String),         -- 重要性等级
+    business_criticality LowCardinality(String),     -- 业务关键性
+    revenue_impact Float64,                          -- 收入影响评估
+    customer_impact_score Float64,                   -- 客户影响评分
     
-    created_at DateTime DEFAULT now()
+    -- 性能趋势分析
+    performance_trend Float64,                       -- 性能趋势系数
+    qps_trend Float64,                               -- QPS趋势系数
+    error_trend Float64,                             -- 错误趋势系数
+    vs_previous_period Float64,                      -- 环比变化
+    vs_same_period_last_week Float64,                -- 周同比变化
+    vs_same_period_last_month Float64,               -- 月同比变化
+    
+    -- 容量和资源分析
+    capacity_utilization Float64,                    -- 容量利用率
+    resource_consumption Float64,                    -- 资源消耗
+    cost_per_request Float64,                        -- 单个请求成本
+    
+    -- 元数据
+    created_at DateTime DEFAULT now(),               -- 创建时间
+    updated_at DateTime DEFAULT now(),               -- 更新时间
+    data_quality_score Float64,                      -- 数据质量评分
+    sample_size UInt64,                              -- 样本大小
+    confidence_level Float64                         -- 置信度
+    
 ) ENGINE = SummingMergeTree()
-PARTITION BY toYYYYMM(stat_time)
-ORDER BY (stat_time, platform, api_module, api_path)
-TTL stat_time + INTERVAL 2 YEAR;
+PARTITION BY (toYYYYMM(stat_time), tenant_code)      -- 按月份+租户分区
+ORDER BY (stat_time, tenant_code, platform, access_entry_point, api_category, api_path)
+TTL stat_time + INTERVAL 2 YEAR
+SETTINGS index_granularity = 8192;
 
--- 2. 对应 02.服务层级分析.xlsx  
-CREATE TABLE IF NOT EXISTS nginx_analytics.ads_service_level_analysis (
+-- 2. 对应 02.服务层级分析.xlsx - 增强版支持微服务架构
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_service_level_analysis_v3 (
     stat_time DateTime,
     time_granularity LowCardinality(String),
+    
+    -- 权限维度
+    tenant_code LowCardinality(String),
+    team_code LowCardinality(String),
+    environment LowCardinality(String),
+    
+    -- 服务架构维度
     platform LowCardinality(String),
     service_name LowCardinality(String),             -- 服务名称
+    service_version String,                          -- 服务版本
+    microservice_name LowCardinality(String),        -- 微服务名称
+    service_tier LowCardinality(String),             -- 服务层级
+    service_mesh_name LowCardinality(String),        -- 服务网格
     cluster_node LowCardinality(String),             -- 集群节点
-    upstream_server String,                          -- 上游服务
+    datacenter LowCardinality(String),               -- 数据中心
+    availability_zone LowCardinality(String),        -- 可用区
+    upstream_server String,                          -- 上游服务器
+    downstream_service LowCardinality(String),       -- 下游服务
     
     -- 服务健康指标
     total_requests UInt64,
@@ -474,14 +545,23 @@ ORDER BY (stat_time, platform, error_rate, api_path)
 TTL stat_time + INTERVAL 1 YEAR;
 
 -- 12. 对应错误码下钻分析 - 新增专门的错误分析表
-CREATE TABLE IF NOT EXISTS nginx_analytics.ads_error_analysis_detailed (
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_error_analysis_detailed_v3 (
     stat_time DateTime,                              -- 统计时间
     time_granularity LowCardinality(String),         -- hour/day/week
     
-    -- 基础维度
+    -- 权限维度
+    tenant_code LowCardinality(String),              -- 租户代码
+    team_code LowCardinality(String),                -- 团队代码
+    environment LowCardinality(String),              -- 环境标识
+    
+    -- 平台入口维度
     platform LowCardinality(String),                 -- 平台维度
     access_type LowCardinality(String),              -- 接入方式
+    access_entry_point LowCardinality(String),       -- 访问入口
+    client_channel LowCardinality(String),           -- 客户端渠道
     api_path String,                                 -- 接口路径
+    api_category LowCardinality(String),             -- 接口分类
+    business_domain LowCardinality(String),          -- 业务域
     
     -- 错误码下钻维度（核心）
     response_status_code LowCardinality(String),     -- 具体错误码: 400/401/403/404/500/502/503/504
@@ -537,14 +617,222 @@ PARTITION BY toYYYYMM(stat_time)
 ORDER BY (stat_time, response_status_code, platform, access_type, api_path)
 TTL stat_time + INTERVAL 1 YEAR;
 
--- 表注释：api_performance_analysis 01.接口性能分析 - 支持任意时间段、多平台维度分析
--- 表注释：service_level_analysis 02.服务层级分析 - 服务健康度和性能监控
--- 表注释：slow_request_analysis 03.慢请求分析 - 慢请求识别和优化建议
--- 表注释：status_code_analysis 04.状态码统计 - HTTP状态码分布和异常检测  
--- 表注释：time_dimension_analysis 05.时间维度分析 - 全部和指定接口的时间趋势
--- 表注释：service_stability_analysis 06.服务稳定性分析 - SLA和MTTR监控
--- 表注释：ip_source_analysis 08.IP来源分析 - 地理分布和安全风险评估
--- 表注释：request_header_analysis 10.请求头分析 - User-Agent和Referer解析
--- 表注释：header_performance_correlation 11.请求头性能关联分析 - 头部与性能关系
--- 表注释：comprehensive_report 12.综合报告 - 执行摘要和整体健康度
--- 表注释：api_error_analysis 13.接口错误分析 - 错误模式和根因分析
+-- =====================================================
+-- 新增ADS主题表 - 支持更丰富的下钻分析
+-- =====================================================
+
+-- 14. 平台入口下钻分析表 - 核心下钻维度
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_platform_entry_analysis (
+    stat_time DateTime,
+    time_granularity LowCardinality(String),
+    tenant_code LowCardinality(String),
+    
+    -- 平台入口组合维度
+    platform LowCardinality(String),
+    platform_category LowCardinality(String),
+    access_entry_point LowCardinality(String),
+    client_channel LowCardinality(String),
+    client_type LowCardinality(String),
+    
+    -- 组合统计指标
+    total_requests UInt64,
+    unique_users UInt64,
+    avg_response_time Float64,
+    p95_response_time Float64,
+    success_rate Float64,
+    error_rate Float64,
+    conversion_rate Float64,                         -- 转化率
+    bounce_rate Float64,                             -- 跳出率
+    user_engagement_score Float64,                   -- 用户参与度评分
+    
+    -- 对比分析
+    platform_market_share Float64,                   -- 平台市场份额
+    entry_effectiveness_score Float64,               -- 入口有效性评分
+    channel_roi Float64,                             -- 渠道投资回报率
+    
+    created_at DateTime DEFAULT now()
+) ENGINE = SummingMergeTree()
+PARTITION BY (toYYYYMM(stat_time), tenant_code)
+ORDER BY (stat_time, tenant_code, platform, access_entry_point)
+TTL stat_time + INTERVAL 1 YEAR;
+
+-- 15. 业务流程分析表 - 支持业务流程监控
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_business_process_analysis (
+    stat_time DateTime,
+    time_granularity LowCardinality(String),
+    tenant_code LowCardinality(String),
+    
+    -- 业务流程维度
+    business_domain LowCardinality(String),
+    business_operation_type LowCardinality(String),
+    user_journey_stage LowCardinality(String),
+    workflow_step LowCardinality(String),
+    process_stage LowCardinality(String),
+    
+    -- 流程性能指标
+    total_processes UInt64,                          -- 总流程数
+    completed_processes UInt64,                      -- 完成流程数
+    failed_processes UInt64,                         -- 失败流程数
+    abandoned_processes UInt64,                      -- 放弃流程数
+    completion_rate Float64,                         -- 完成率
+    failure_rate Float64,                            -- 失败率
+    abandonment_rate Float64,                        -- 放弃率
+    
+    -- 流程时间分析
+    avg_process_duration Float64,                    -- 平均流程时长
+    p95_process_duration Float64,                    -- 95%流程时长
+    avg_step_duration Float64,                       -- 平均步骤时长
+    bottleneck_step String,                          -- 瓶颈步骤
+    
+    -- 业务价值指标
+    business_value_generated Float64,                -- 产生的业务价值
+    cost_per_process Float64,                        -- 每个流程成本
+    roi_score Float64,                               -- 投资回报率
+    
+    created_at DateTime DEFAULT now()
+) ENGINE = SummingMergeTree()
+PARTITION BY (toYYYYMM(stat_time), tenant_code)
+ORDER BY (stat_time, tenant_code, business_domain, business_operation_type)
+TTL stat_time + INTERVAL 2 YEAR;
+
+-- 16. 用户行为分析表 - 用户旅程和行为模式
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_user_behavior_analysis (
+    stat_time DateTime,
+    time_granularity LowCardinality(String),
+    tenant_code LowCardinality(String),
+    
+    -- 用户分类维度
+    user_type LowCardinality(String),
+    user_tier LowCardinality(String),
+    user_segment LowCardinality(String),
+    user_journey_stage LowCardinality(String),
+    authentication_method LowCardinality(String),
+    
+    -- 用户行为指标
+    active_users UInt64,                             -- 活跃用户数
+    new_users UInt64,                                -- 新用户数
+    returning_users UInt64,                          -- 回访用户数
+    avg_session_duration Float64,                    -- 平均会话时长
+    avg_page_views_per_session Float64,              -- 平均会话页面浏览数
+    bounce_rate Float64,                             -- 跳出率
+    conversion_rate Float64,                         -- 转化率
+    user_retention_rate Float64,                     -- 用户留存率
+    
+    -- 用户体验指标
+    avg_user_satisfaction_score Float64,             -- 平均用户满意度
+    user_complaint_rate Float64,                     -- 用户投诉率
+    support_ticket_rate Float64,                     -- 支持工单率
+    
+    -- 用户价值分析
+    avg_customer_lifetime_value Float64,             -- 平均客户生命周期价值
+    avg_revenue_per_user Float64,                    -- 平均用户收入
+    user_engagement_score Float64,                   -- 用户参与度评分
+    
+    created_at DateTime DEFAULT now()
+) ENGINE = SummingMergeTree()
+PARTITION BY (toYYYYMM(stat_time), tenant_code)
+ORDER BY (stat_time, tenant_code, user_type, user_segment)
+TTL stat_time + INTERVAL 1 YEAR;
+
+-- 17. 安全监控分析表 - 安全威胁和风险分析
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_security_monitoring_analysis (
+    stat_time DateTime,
+    time_granularity LowCardinality(String),
+    tenant_code LowCardinality(String),
+    
+    -- 安全维度
+    security_risk_level LowCardinality(String),
+    threat_category LowCardinality(String),
+    ip_reputation LowCardinality(String),
+    attack_signature String,
+    
+    -- 安全事件统计
+    total_security_events UInt64,                    -- 总安全事件数
+    high_risk_events UInt64,                         -- 高风险事件数
+    blocked_requests UInt64,                         -- 被阻断请求数
+    suspicious_activities UInt64,                    -- 可疑活动数
+    false_positive_rate Float64,                     -- 误报率
+    
+    -- 攻击分析
+    ddos_attacks UInt64,                             -- DDoS攻击次数
+    injection_attempts UInt64,                       -- 注入攻击尝试
+    xss_attempts UInt64,                             -- XSS攻击尝试
+    brute_force_attempts UInt64,                     -- 暴力破解尝试
+    
+    -- 安全响应指标
+    avg_detection_time Float64,                      -- 平均检测时间
+    avg_response_time Float64,                       -- 平均响应时间
+    incident_resolution_rate Float64,                -- 事件解决率
+    security_posture_score Float64,                  -- 安全态势评分
+    
+    created_at DateTime DEFAULT now()
+) ENGINE = SummingMergeTree()
+PARTITION BY (toYYYYMM(stat_time), tenant_code)
+ORDER BY (stat_time, tenant_code, security_risk_level, threat_category)
+TTL stat_time + INTERVAL 6 MONTH;
+
+-- 18. 租户权限使用分析表 - 多租户权限监控
+CREATE TABLE IF NOT EXISTS nginx_analytics.ads_tenant_permission_analysis (
+    stat_time DateTime,
+    time_granularity LowCardinality(String),
+    
+    -- 租户权限维度
+    tenant_code LowCardinality(String),
+    team_code LowCardinality(String),
+    environment LowCardinality(String),
+    data_sensitivity Enum8('public'=1, 'internal'=2, 'confidential'=3, 'restricted'=4),
+    compliance_zone LowCardinality(String),
+    
+    -- 权限使用统计
+    total_requests UInt64,                           -- 总请求数
+    authorized_requests UInt64,                      -- 授权请求数
+    unauthorized_requests UInt64,                    -- 未授权请求数
+    permission_denied_requests UInt64,               -- 权限拒绝请求数
+    
+    -- 数据访问统计
+    public_data_access UInt64,                       -- 公开数据访问次数
+    internal_data_access UInt64,                     -- 内部数据访问次数
+    confidential_data_access UInt64,                 -- 机密数据访问次数
+    restricted_data_access UInt64,                   -- 受限数据访问次数
+    
+    -- 合规性指标
+    compliance_score Float64,                        -- 合规性评分
+    policy_violation_count UInt32,                   -- 策略违规次数
+    audit_trail_completeness Float64,                -- 审计轨迹完整性
+    data_retention_compliance Float64,               -- 数据保留合规性
+    
+    -- 成本分析
+    total_cost Float64,                              -- 总成本
+    cost_per_request Float64,                        -- 每请求成本
+    resource_utilization Float64,                    -- 资源利用率
+    
+    created_at DateTime DEFAULT now()
+) ENGINE = SummingMergeTree()
+PARTITION BY (toYYYYMM(stat_time), tenant_code)
+ORDER BY (stat_time, tenant_code, team_code, environment)
+TTL stat_time + INTERVAL 3 YEAR;  -- 合规要求保留更长时间
+
+-- =====================================================
+-- 表注释和说明
+-- =====================================================
+
+-- 核心分析主题表 (1-13)：
+-- 01. api_performance_analysis_v3: 接口性能分析 - 支持平台入口下钻、租户隔离
+-- 02. service_level_analysis_v3: 服务层级分析 - 支持微服务架构、SLA监控
+-- 03. slow_request_analysis: 慢请求分析 - 慢请求识别和优化建议
+-- 04. status_code_analysis: 状态码统计 - HTTP状态码分布和异常检测  
+-- 05. time_dimension_analysis: 时间维度分析 - 全部和指定接口的时间趋势
+-- 06. service_stability_analysis: 服务稳定性分析 - SLA和MTTR监控
+-- 07. ip_source_analysis: IP来源分析 - 地理分布和安全风险评估
+-- 08. request_header_analysis: 请求头分析 - User-Agent和Referer解析
+-- 09. header_performance_correlation: 请求头性能关联分析 - 头部与性能关系
+-- 10. comprehensive_report: 综合报告 - 执行摘要和整体健康度
+-- 11. api_error_analysis: 接口错误分析 - 错误模式和根因分析
+-- 12. error_analysis_detailed: 错误码下钻分析 - 多维度错误分析
+
+-- 新增分析主题表 (14-18)：
+-- 14. platform_entry_analysis: 平台入口下钻分析 - 支持工作介绍核心需求
+-- 15. business_process_analysis: 业务流程分析 - 业务流程监控和优化
+-- 16. user_behavior_analysis: 用户行为分析 - 用户旅程和行为模式
+-- 17. security_monitoring_analysis: 安全监控分析 - 安全威胁检测和风险评估
+-- 18. tenant_permission_analysis: 租户权限分析 - 多租户权限使用监控和合规性

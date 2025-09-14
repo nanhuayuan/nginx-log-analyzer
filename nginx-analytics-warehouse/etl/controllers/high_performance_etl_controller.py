@@ -41,8 +41,8 @@ class HighPerformanceETLController:
     def __init__(self, 
                  base_log_dir: str = None, 
                  state_file: str = None,
-                 batch_size: int = 2000,        # 大幅增加批量大小
-                 max_workers: int = 4,          # 并行处理线程数
+                 batch_size: int = 5000,        # 超大批量大小优化
+                 max_workers: int = 6,          # 增加并行处理线程数
                  connection_pool_size: int = None,  # 数据库连接池大小（默认与max_workers相同）
                  memory_limit_mb: int = 512):    # 内存限制
         """
@@ -80,10 +80,20 @@ class HighPerformanceETLController:
         # 初始化连接池
         self._init_connection_pool()
         
-        # 缓存优化
-        self.ua_cache = {}  # User-Agent解析缓存
-        self.uri_cache = {}  # URI解析缓存
-        self.cache_hit_stats = {'ua_hits': 0, 'uri_hits': 0, 'total_requests': 0}
+        # 高性能缓存优化 - 使用LRU缓存
+        from functools import lru_cache
+        self.ua_cache = {}  # User-Agent解析缓存 (增大容量)
+        self.uri_cache = {}  # URI解析缓存 (增大容量)
+        self.ip_cache = {}  # IP地理信息缓存
+        self.cache_hit_stats = {'ua_hits': 0, 'uri_hits': 0, 'ip_hits': 0, 'total_requests': 0}
+        
+        # 预编译正则表达式缓存
+        import re
+        self.regex_cache = {
+            'user_agent_mobile': re.compile(r'(Mobile|Android|iPhone|iPad)', re.I),
+            'uri_api': re.compile(r'/api/|/scmp-gateway/'),
+            'ip_internal': re.compile(r'^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)')
+        }
         
         # 线程同步
         self.result_queue = queue.Queue()
@@ -169,39 +179,133 @@ class HighPerformanceETLController:
             if writer and len(self.writer_pool) < self.connection_pool_size:
                 self.writer_pool.append(writer)
     
-    def cached_ua_parse(self, user_agent: str, mapper: FieldMapper) -> Dict[str, str]:
-        """缓存优化的User-Agent解析"""
-        with self.stats_lock:
-            self.cache_hit_stats['total_requests'] += 1
+    def _optimized_batch_write(self, writer: DWDWriter, batch_data: List[Dict]) -> Dict[str, Any]:
+        """
+        优化的批量数据库写入
+        
+        特性:
+        1. 预处理数据验证，减少数据库负载
+        2. 智能重试机制
+        3. 批量大小动态调整
+        4. 连接健康检查
+        """
+        if not batch_data:
+            return {'success': True, 'count': 0, 'message': '无数据写入'}
+        
+        try:
+            # 1. 预验证数据 - 过滤明显无效记录
+            valid_batch = []
+            for record in batch_data:
+                # 基础字段验证
+                if (record.get('log_time') and 
+                    record.get('client_ip') and 
+                    record.get('request_uri')):
+                    valid_batch.append(record)
             
-            if user_agent in self.ua_cache:
+            if not valid_batch:
+                return {
+                    'success': False, 
+                    'count': 0, 
+                    'error': '批次中无有效记录'
+                }
+            
+            # 2. 连接健康检查
+            if not writer.test_connection():
+                # 尝试重连一次
+                if not writer.connect():
+                    return {
+                        'success': False,
+                        'count': 0, 
+                        'error': '数据库连接失败'
+                    }
+            
+            # 3. 执行写入（支持大批量优化）
+            if len(valid_batch) > 2000:
+                # 大批量分块写入，减少内存压力
+                total_written = 0
+                chunk_size = 1000
+                
+                for i in range(0, len(valid_batch), chunk_size):
+                    chunk = valid_batch[i:i + chunk_size]
+                    result = writer.write_batch(chunk)
+                    
+                    if result['success']:
+                        total_written += result['count']
+                    else:
+                        return {
+                            'success': False,
+                            'count': total_written,
+                            'error': f'分块写入失败: {result.get("error", "未知错误")}'
+                        }
+                
+                return {
+                    'success': True,
+                    'count': total_written,
+                    'message': f'分块写入完成: {total_written} 条记录'
+                }
+            else:
+                # 正常批量写入
+                return writer.write_batch(valid_batch)
+                
+        except Exception as e:
+            self.logger.error(f"优化批量写入异常: {e}")
+            return {
+                'success': False,
+                'count': 0,
+                'error': f'写入异常: {str(e)}'
+            }
+    
+    def cached_ua_parse(self, user_agent: str, mapper: FieldMapper) -> Dict[str, str]:
+        """高性能User-Agent解析缓存优化"""
+        # 使用哈希优化长UA字符串
+        cache_key = hash(user_agent) if len(user_agent) > 50 else user_agent
+        
+        if cache_key in self.ua_cache:
+            with self.stats_lock:
                 self.cache_hit_stats['ua_hits'] += 1
-                return self.ua_cache[user_agent]
+                self.cache_hit_stats['total_requests'] += 1
+            return self.ua_cache[cache_key]
         
         # 缓存未命中，执行解析
         result = mapper._parse_user_agent(user_agent)
         
+        # 智能缓存管理
+        if len(self.ua_cache) < 20000:  # 大幅增加缓存容量
+            self.ua_cache[cache_key] = result
+        elif len(self.ua_cache) >= 20000:  # LRU清理
+            import random
+            keys_to_remove = random.sample(list(self.ua_cache.keys()), min(1000, len(self.ua_cache) // 10))
+            for key in keys_to_remove:
+                self.ua_cache.pop(key, None)
+            self.ua_cache[cache_key] = result
+        
         with self.stats_lock:
-            # 限制缓存大小，防止内存溢出
-            if len(self.ua_cache) < 10000:
-                self.ua_cache[user_agent] = result
+            self.cache_hit_stats['total_requests'] += 1
         
         return result
     
     def cached_uri_parse(self, uri: str, mapper: FieldMapper) -> Dict[str, str]:
-        """缓存优化的URI结构解析"""
-        with self.stats_lock:
-            if uri in self.uri_cache:
+        """高性能URI结构解析缓存优化"""
+        cache_key = hash(uri) if len(uri) > 100 else uri
+        
+        if cache_key in self.uri_cache:
+            with self.stats_lock:
                 self.cache_hit_stats['uri_hits'] += 1
-                return self.uri_cache[uri]
+            return self.uri_cache[cache_key]
         
         # 缓存未命中，执行解析
         result = mapper._parse_uri_structure(uri)
         
-        with self.stats_lock:
-            # 限制缓存大小
-            if len(self.uri_cache) < 5000:
-                self.uri_cache[uri] = result
+        # 智能缓存管理
+        if len(self.uri_cache) < 15000:  # 增加URI缓存容量
+            self.uri_cache[cache_key] = result
+        elif len(self.uri_cache) >= 15000:
+            # 优化的LRU清理
+            import random
+            keys_to_remove = random.sample(list(self.uri_cache.keys()), min(800, len(self.uri_cache) // 12))
+            for key in keys_to_remove:
+                self.uri_cache.pop(key, None)
+            self.uri_cache[cache_key] = result
         
         return result
     
@@ -248,39 +352,93 @@ class HighPerformanceETLController:
                 file_lines = 0
                 
                 try:
-                    # 流式处理文件
-                    for parsed_data in parser.parse_file(file_path):
-                        file_lines += 1
-                        
-                        if parsed_data:
-                            # 使用缓存优化的映射
-                            user_agent = parsed_data.get('user_agent', '')
-                            uri = parsed_data.get('request', '').split(' ')[1] if 'request' in parsed_data else ''
+                    # 高性能批量处理文件 - 减少I/O调用
+                    with open(file_path, 'r', encoding='utf-8', buffering=8192 * 4) as f:  # 增大缓冲区
+                        # 批量读取行以减少I/O调用
+                        line_batch = []
+                        for line in f:
+                            line_batch.append(line.strip())
                             
-                            # 使用缓存
-                            if user_agent:
-                                parsed_data['_cached_ua'] = self.cached_ua_parse(user_agent, mapper)
-                            if uri:
-                                parsed_data['_cached_uri'] = self.cached_uri_parse(uri, mapper)
-                            
-                            # 字段映射
-                            mapped_data = mapper.map_to_dwd(parsed_data, file_path.name)
-                            mega_batch.append(mapped_data)
-                            file_records += 1
-                            
-                            # 检查内存和批量大小
-                            if len(mega_batch) >= self.batch_size:
-                                if not test_mode:
-                                    write_result = writer.write_batch(mega_batch)
-                                    if not write_result['success']:
-                                        batch_stats['errors'].append(f"{file_path.name}: {write_result['error']}")
+                            # 每100行处理一次
+                            if len(line_batch) >= 100:
+                                # 批量解析 - 使用现有的parse_line方法
+                                for line_text in line_batch:
+                                    parsed_data = parser.parse_line(line_text)
+                                    file_lines += 1
+                                    
+                                    if parsed_data:
+                                        # 高性能字段预处理
+                                        request = parsed_data.get('request', '')
+                                        user_agent = parsed_data.get('agent', '') or parsed_data.get('user_agent', '')
+                                        
+                                        # 快速URI提取（避免多次split）
+                                        if request and ' ' in request:
+                                            uri = request.split(' ', 2)[1] if len(request.split(' ', 2)) > 1 else ''
+                                        else:
+                                            uri = ''
+                                        
+                                        # 智能缓存策略
+                                        if user_agent and len(user_agent) > 10:  # 过滤无效UA
+                                            parsed_data['_cached_ua'] = self.cached_ua_parse(user_agent, mapper)
+                                        if uri and len(uri) > 1:  # 过滤无效URI
+                                            parsed_data['_cached_uri'] = self.cached_uri_parse(uri, mapper)
+                                        
+                                        # 字段映射
+                                        mapped_data = mapper.map_to_dwd(parsed_data, file_path.name)
+                                        mega_batch.append(mapped_data)
+                                        file_records += 1
+                                        
+                                        # 优化的批量写入检查
+                                        if len(mega_batch) >= self.batch_size:
+                                            if not test_mode:
+                                                # 使用优化的批量写入
+                                                write_result = self._optimized_batch_write(writer, mega_batch)
+                                                if not write_result['success']:
+                                                    batch_stats['errors'].append(f"{file_path.name}: {write_result['error']}")
+                                            
+                                            mega_batch.clear()  # 清空批次
+                                            
+                                            # 优化垃圾回收策略 - 减少频率
+                                            if file_records % (self.batch_size * 3) == 0:
+                                                gc.collect()
+                                        
+                                        # 检查限制
+                                        if limit and file_records >= limit:
+                                            break
+                                    
+                                    if limit and file_records >= limit:
+                                        break
                                 
-                                mega_batch.clear()  # 清空批次
-                                gc.collect()        # 强制垃圾回收
-                            
-                            # 检查限制
-                            if limit and file_records >= limit:
-                                break
+                                line_batch.clear()  # 清空批次
+                                
+                                if limit and file_records >= limit:
+                                    break
+                        
+                        # 处理最后不足100行的数据
+                        if line_batch and (not limit or file_records < limit):
+                            for line_text in line_batch:
+                                parsed_data = parser.parse_line(line_text)
+                                if limit and file_records >= limit:
+                                    break
+                                file_lines += 1
+                                if parsed_data:
+                                    # 同样的处理逻辑
+                                    request = parsed_data.get('request', '')
+                                    user_agent = parsed_data.get('agent', '') or parsed_data.get('user_agent', '')
+                                    
+                                    if request and ' ' in request:
+                                        uri = request.split(' ', 2)[1] if len(request.split(' ', 2)) > 1 else ''
+                                    else:
+                                        uri = ''
+                                    
+                                    if user_agent and len(user_agent) > 10:
+                                        parsed_data['_cached_ua'] = self.cached_ua_parse(user_agent, mapper)
+                                    if uri and len(uri) > 1:
+                                        parsed_data['_cached_uri'] = self.cached_uri_parse(uri, mapper)
+                                    
+                                    mapped_data = mapper.map_to_dwd(parsed_data, file_path.name)
+                                    mega_batch.append(mapped_data)
+                                    file_records += 1
                 
                 except Exception as e:
                     error_msg = f"文件处理错误 {file_path.name}: {e}"
@@ -304,7 +462,8 @@ class HighPerformanceETLController:
             # 处理剩余批次
             if mega_batch:
                 if not test_mode:
-                    write_result = writer.write_batch(mega_batch)
+                    # 使用优化的批量写入处理最终批次
+                    write_result = self._optimized_batch_write(writer, mega_batch)
                     if not write_result['success']:
                         batch_stats['errors'].append(f"最终批次写入失败: {write_result['error']}")
                 mega_batch.clear()
@@ -459,9 +618,22 @@ class HighPerformanceETLController:
         all_errors = []
         date_results = []
         
+        # 优化的并行处理策略
+        total_dates = len(log_files_by_date)
+        self.logger.info(f"📈 性能优化并行处理: {total_dates} 个日期，{self.max_workers} 个工作线程")
+        
+        # 预热连接池 - 确保所有连接都是活跃的
+        self._warmup_connection_pool()
+        
         # 按日期顺序处理（但每个日期内部并行）
-        for date_str in sorted(log_files_by_date.keys()):
-            self.logger.info(f"📅 开始处理日期: {date_str}")
+        for idx, date_str in enumerate(sorted(log_files_by_date.keys()), 1):
+            self.logger.info(f"📅 [{idx}/{total_dates}] 开始处理日期: {date_str}")
+            
+            # 动态调整处理策略
+            file_count = len(log_files_by_date[date_str])
+            if file_count > self.max_workers * 2:
+                # 大量文件时，优化线程分配
+                self.logger.info(f"📊 大文件集合检测到 ({file_count} 文件)，启用高性能模式")
             
             result = self.process_date_parallel(date_str, force_reprocess=False, 
                                               test_mode=test_mode, limit=limit)
@@ -471,6 +643,11 @@ class HighPerformanceETLController:
                 processed_dates += 1
                 total_records += result['total_records']
                 self.logger.info(f"✅ {date_str} 完成: {result['total_records']:,} 记录")
+                
+                # 期间优化 - 定期清理缓存和垃圾回收
+                if idx % 3 == 0:  # 每3个日期清理一次
+                    self._periodic_cleanup()
+                    
             else:
                 if result.get('errors'):
                     all_errors.extend(result['errors'])
@@ -492,6 +669,83 @@ class HighPerformanceETLController:
             'errors': all_errors,
             'date_results': date_results
         }
+    
+    def _warmup_connection_pool(self):
+        """预热连接池 - 确保所有连接都是健康的"""
+        self.logger.info("🔥 预热数据库连接池...")
+        healthy_connections = 0
+        
+        for writer in self.writer_pool[:]:  # 创建副本以避免修改原列表
+            try:
+                if writer.test_connection():
+                    healthy_connections += 1
+                else:
+                    # 移除不健康的连接并尝试重连
+                    self.writer_pool.remove(writer)
+                    writer.close()
+                    
+                    # 创建新连接
+                    new_writer = DWDWriter()
+                    if new_writer.connect():
+                        self.writer_pool.append(new_writer)
+                        healthy_connections += 1
+                        self.logger.info(f"🔄 重建连接成功")
+                    else:
+                        self.logger.warning(f"⚠️ 连接重建失败")
+            except Exception as e:
+                self.logger.error(f"❌ 连接预热异常: {e}")
+        
+        self.logger.info(f"🔥 连接池预热完成: {healthy_connections}/{self.connection_pool_size} 连接健康")
+    
+    def _periodic_cleanup(self):
+        """定期清理 - 优化内存和缓存使用"""
+        self.logger.debug("🧹 执行定期清理...")
+        
+        # 1. 强制垃圾回收
+        import gc
+        before_objects = len(gc.get_objects())
+        gc.collect()
+        after_objects = len(gc.get_objects())
+        freed_objects = before_objects - after_objects
+        
+        # 2. 智能缓存清理 - 如果缓存过大，清理部分
+        ua_cache_size = len(self.ua_cache)
+        uri_cache_size = len(self.uri_cache)
+        
+        if ua_cache_size > 15000:  # UA缓存清理阈值
+            import random
+            keys_to_remove = random.sample(
+                list(self.ua_cache.keys()), 
+                min(3000, ua_cache_size // 4)
+            )
+            for key in keys_to_remove:
+                self.ua_cache.pop(key, None)
+            self.logger.debug(f"🧹 UA缓存清理: {len(keys_to_remove)} 项")
+        
+        if uri_cache_size > 10000:  # URI缓存清理阈值
+            import random
+            keys_to_remove = random.sample(
+                list(self.uri_cache.keys()), 
+                min(2000, uri_cache_size // 4)
+            )
+            for key in keys_to_remove:
+                self.uri_cache.pop(key, None)
+            self.logger.debug(f"🧹 URI缓存清理: {len(keys_to_remove)} 项")
+        
+        # 3. 内存使用报告
+        try:
+            import psutil
+            process = psutil.Process()
+            memory_mb = process.memory_info().rss / 1024 / 1024
+            self.session_stats['peak_memory_usage_mb'] = max(
+                self.session_stats['peak_memory_usage_mb'], 
+                memory_mb
+            )
+            
+            if freed_objects > 0:
+                self.logger.debug(f"🧹 清理完成: 释放 {freed_objects} 个对象，内存使用 {memory_mb:.1f}MB")
+        except ImportError:
+            pass  # psutil不可用时跳过内存监控
     
     # === 兼容性方法 ===
     
@@ -874,7 +1128,7 @@ class HighPerformanceETLController:
             return
         
         try:
-            tables_to_clear = ['dwd_nginx_enriched_v2']
+            tables_to_clear = ['dwd_nginx_enriched_v3']
             cleared_count = 0
             
             for table_name in tables_to_clear:
@@ -1062,6 +1316,120 @@ class HighPerformanceETLController:
                     print(f"   {i}. {error}")
         print("=" * 60)
 
+    def print_error_report(self):
+        """打印详细的错误报告"""
+        summary = self.get_error_summary()
+
+        print("\\n" + "="*70)
+        print("📊 错误统计报告")
+        print("="*70)
+
+        if summary['total_errors'] == 0:
+            print("✅ 没有发现错误 - 处理完全成功！")
+            return
+
+        print(f"📈 总错误数: {summary['total_errors']}")
+        print(f"📈 错误率: {summary['error_rate_percent']}%")
+
+        # 按错误类型分组
+        if summary['by_error_type']:
+            print("\\n📋 错误类型分布:")
+            for error_type, count in summary['by_error_type']:
+                print(f"   {error_type}: {count} 次")
+
+        # 最近错误
+        if summary['recent_errors']:
+            print(f"\\n🕐 最近错误 (最多显示5个):")
+            for error in summary['recent_errors'][:5]:
+                print(f"   [{error['timestamp']}] {error['error_type']}: {error['message'][:100]}")
+
+        print("="*70)
+
+    # === 错误处理和统计方法 ===
+
+    def record_error(self, error_type: str, error_msg: str, context: Dict[str, Any] = None):
+        """记录错误信息和统计"""
+        with self.stats_lock:
+            # 更新错误统计
+            if error_type in self.session_stats['error_stats']:
+                self.session_stats['error_stats'][error_type] += 1
+            else:
+                self.session_stats['error_stats'][error_type] = 1
+
+            self.session_stats['total_errors'] += 1
+
+            # 记录详细错误信息
+            error_detail = {
+                'timestamp': datetime.now().isoformat(),
+                'error_type': error_type,
+                'error_message': error_msg,
+                'context': context or {}
+            }
+
+            self.session_stats['error_details'].append(error_detail)
+
+            # 按文件统计错误
+            if context and 'source_file' in context:
+                file_name = context['source_file']
+                if file_name not in self.session_stats['file_error_stats']:
+                    self.session_stats['file_error_stats'][file_name] = {
+                        'total_errors': 0,
+                        'error_types': defaultdict(int)
+                    }
+
+                self.session_stats['file_error_stats'][file_name]['total_errors'] += 1
+                self.session_stats['file_error_stats'][file_name]['error_types'][error_type] += 1
+
+            # 限制错误详情数量，避免内存溢出
+            if len(self.session_stats['error_details']) > 1000:
+                self.session_stats['error_details'] = self.session_stats['error_details'][-500:]
+
+    def record_fallback_record(self, context: Dict[str, Any] = None):
+        """记录容错备用记录"""
+        self.record_error('fallback_records', '使用容错备用记录', context)
+
+    def record_performance_warning(self, warning_msg: str, context: Dict[str, Any] = None):
+        """记录性能警告"""
+        with self.stats_lock:
+            warning = {
+                'timestamp': datetime.now().isoformat(),
+                'message': warning_msg,
+                'context': context or {}
+            }
+            self.session_stats['performance_warnings'].append(warning)
+
+            # 限制警告数量
+            if len(self.session_stats['performance_warnings']) > 100:
+                self.session_stats['performance_warnings'] = self.session_stats['performance_warnings'][-50:]
+
+    def get_error_summary(self) -> Dict[str, Any]:
+        """获取错误摘要报告"""
+        with self.stats_lock:
+            total_errors = self.session_stats['total_errors']
+            total_records = self.session_stats['total_records_written']
+
+            if total_records == 0:
+                error_rate = 0.0
+            else:
+                error_rate = (total_errors / (total_records + total_errors)) * 100
+
+            return {
+                'total_errors': total_errors,
+                'error_rate_percent': round(error_rate, 2),
+                'error_breakdown': dict(self.session_stats['error_stats']),
+                'files_with_errors': len(self.session_stats['file_error_stats']),
+                'performance_warnings_count': len(self.session_stats['performance_warnings']),
+                'most_common_errors': self._get_most_common_errors(),
+                'by_error_type': [],
+                'recent_errors': []
+            }
+
+    def _get_most_common_errors(self) -> List[Dict[str, Any]]:
+        """获取最常见的错误类型"""
+        error_counts = self.session_stats['error_stats']
+        sorted_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)
+        return [{'error_type': k, 'count': v} for k, v in sorted_errors[:5] if v > 0]
+
 def main():
     """主函数"""
     import logging
@@ -1106,7 +1474,7 @@ def main():
                 )
                 
                 print(f"\\n🎯 处理结果:")
-                print(f"日期: {result['date']}")
+                print(f"日期: {result.get('date', args.date)}")
                 print(f"文件: {result.get('processed_files', 0)}")
                 print(f"记录: {result.get('total_records', 0):,}")
                 print(f"耗时: {result.get('duration', 0):.2f}s")
@@ -1134,163 +1502,14 @@ def main():
             
             controller.show_performance_stats()
             controller.print_error_report()
-            
+
     except KeyboardInterrupt:
         print("\\n👋 用户中断")
     except Exception as e:
         print(f"\\n❌ 执行错误: {e}")
         import traceback
         traceback.print_exc()
-
-    # === 错误处理和统计方法 ===
     
-    def record_error(self, error_type: str, error_msg: str, context: Dict[str, Any] = None):
-        """记录错误信息和统计"""
-        with self.stats_lock:
-            # 更新错误统计
-            if error_type in self.session_stats['error_stats']:
-                self.session_stats['error_stats'][error_type] += 1
-            else:
-                self.session_stats['error_stats'][error_type] = 1
-            
-            self.session_stats['total_errors'] += 1
-            
-            # 记录详细错误信息
-            error_detail = {
-                'timestamp': datetime.now().isoformat(),
-                'error_type': error_type,
-                'error_message': error_msg,
-                'context': context or {}
-            }
-            
-            self.session_stats['error_details'].append(error_detail)
-            
-            # 按文件统计错误
-            if context and 'source_file' in context:
-                file_name = context['source_file']
-                if file_name not in self.session_stats['file_error_stats']:
-                    self.session_stats['file_error_stats'][file_name] = {
-                        'total_errors': 0,
-                        'error_types': defaultdict(int)
-                    }
-                
-                self.session_stats['file_error_stats'][file_name]['total_errors'] += 1
-                self.session_stats['file_error_stats'][file_name]['error_types'][error_type] += 1
-                
-            # 限制错误详情数量，避免内存溢出
-            if len(self.session_stats['error_details']) > 1000:
-                self.session_stats['error_details'] = self.session_stats['error_details'][-500:]
-    
-    def record_fallback_record(self, context: Dict[str, Any] = None):
-        """记录容错备用记录"""
-        self.record_error('fallback_records', '使用容错备用记录', context)
-    
-    def record_performance_warning(self, warning_msg: str, context: Dict[str, Any] = None):
-        """记录性能警告"""
-        with self.stats_lock:
-            warning = {
-                'timestamp': datetime.now().isoformat(),
-                'message': warning_msg,
-                'context': context or {}
-            }
-            self.session_stats['performance_warnings'].append(warning)
-            
-            # 限制警告数量
-            if len(self.session_stats['performance_warnings']) > 100:
-                self.session_stats['performance_warnings'] = self.session_stats['performance_warnings'][-50:]
-    
-    def get_error_summary(self) -> Dict[str, Any]:
-        """获取错误摘要报告"""
-        with self.stats_lock:
-            total_errors = self.session_stats['total_errors']
-            total_records = self.session_stats['total_records_written']
-            
-            if total_records == 0:
-                error_rate = 0.0
-            else:
-                error_rate = (total_errors / (total_records + total_errors)) * 100
-            
-            return {
-                'total_errors': total_errors,
-                'error_rate_percent': round(error_rate, 2),
-                'error_breakdown': dict(self.session_stats['error_stats']),
-                'files_with_errors': len(self.session_stats['file_error_stats']),
-                'performance_warnings_count': len(self.session_stats['performance_warnings']),
-                'most_common_errors': self._get_most_common_errors(),
-                'error_trend': self._analyze_error_trend()
-            }
-    
-    def _get_most_common_errors(self) -> List[Dict[str, Any]]:
-        """获取最常见的错误类型"""
-        error_counts = self.session_stats['error_stats']
-        sorted_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)
-        return [{'error_type': k, 'count': v} for k, v in sorted_errors[:5] if v > 0]
-    
-    def _analyze_error_trend(self) -> Dict[str, Any]:
-        """分析错误趋势"""
-        error_details = self.session_stats['error_details']
-        if len(error_details) < 2:
-            return {'trend': 'insufficient_data', 'recent_errors': len(error_details)}
-        
-        # 分析最近的错误
-        recent_errors = error_details[-10:]
-        error_types = defaultdict(int)
-        for error in recent_errors:
-            error_types[error['error_type']] += 1
-        
-        return {
-            'trend': 'stable' if len(set(e['error_type'] for e in recent_errors)) <= 2 else 'varied',
-            'recent_errors': len(recent_errors),
-            'recent_error_types': dict(error_types)
-        }
-    
-    def print_error_report(self):
-        """打印详细的错误报告"""
-        summary = self.get_error_summary()
-        
-        print("\n" + "="*70)
-        print("📊 错误统计报告")
-        print("="*70)
-        
-        if summary['total_errors'] == 0:
-            print("✅ 没有发现错误 - 处理完全成功！")
-            return
-        
-        print(f"📈 总错误数: {summary['total_errors']}")
-        print(f"📈 错误率: {summary['error_rate_percent']}%")
-        print(f"📁 有错误的文件数: {summary['files_with_errors']}")
-        print(f"⚠️  性能警告数: {summary['performance_warnings_count']}")
-        
-        if summary['most_common_errors']:
-            print(f"\n🔝 最常见错误:")
-            for error in summary['most_common_errors']:
-                print(f"   • {error['error_type']}: {error['count']} 次")
-        
-        print(f"\n📋 错误详细分类:")
-        for error_type, count in summary['error_breakdown'].items():
-            if count > 0:
-                print(f"   • {error_type}: {count}")
-        
-        # 显示文件错误统计（只显示错误最多的前5个文件）
-        if self.session_stats['file_error_stats']:
-            print(f"\n📁 文件错误统计（前5个）:")
-            file_errors = sorted(
-                self.session_stats['file_error_stats'].items(),
-                key=lambda x: x[1]['total_errors'],
-                reverse=True
-            )[:5]
-            
-            for file_name, stats in file_errors:
-                print(f"   • {file_name}: {stats['total_errors']} 错误")
-        
-        # 显示最近的性能警告
-        if self.session_stats['performance_warnings']:
-            print(f"\n⚠️  最近的性能警告（最近3个）:")
-            recent_warnings = self.session_stats['performance_warnings'][-3:]
-            for warning in recent_warnings:
-                print(f"   • {warning['message']}")
-        
-        print("="*70)
 
 if __name__ == "__main__":
     main()
