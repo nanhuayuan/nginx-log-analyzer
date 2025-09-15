@@ -32,7 +32,7 @@
       },
       "id": 1,
       "panels": [],
-      "title": "Panel 1",
+      "title": "概览统计",
       "type": "row"
     },
     {
@@ -94,7 +94,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "${DS_CLICKHOUSE}"
           },
-          "queryType": "table",
+          "queryType": "timeseries",
           "refId": "A",
           "rawSql": "SELECT\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\n    uniq(api_category) as active_services\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND api_category != ''\nGROUP BY time\nORDER BY time"
         }
@@ -129,7 +129,9 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "percent",
+          "max": 100,
+          "min": 0
         },
         "overrides": []
       },
@@ -161,7 +163,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "${DS_CLICKHOUSE}"
           },
-          "queryType": "table",
+          "queryType": "timeseries",
           "refId": "A",
           "rawSql": "SELECT\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\n    count() / $__interval_s as total_rps\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time\nORDER BY time"
         }
@@ -230,7 +232,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "${DS_CLICKHOUSE}"
           },
-          "queryType": "table",
+          "queryType": "timeseries",
           "refId": "A",
           "rawSql": "SELECT\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\n    (countIf(response_status_code IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) as success_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time\nORDER BY time"
         }
@@ -297,7 +299,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "${DS_CLICKHOUSE}"
           },
-          "queryType": "table",
+          "queryType": "timeseries",
           "refId": "A",
           "rawSql": "SELECT\n    toUnixTimestamp(toStartOfInterval(log_time, toIntervalSecond($__interval_s))) * 1000 as time,\n    avg(total_request_duration * 1000) as avg_response_time_ms\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time\nORDER BY time"
         }
@@ -315,7 +317,7 @@
       },
       "id": 6,
       "panels": [],
-      "title": "Panel 6",
+      "title": "趋势分析",
       "type": "row"
     },
     {
@@ -493,7 +495,7 @@
       },
       "id": 8,
       "panels": [],
-      "title": "Panel 8",
+      "title": "详细分析",
       "type": "row"
     },
     {
@@ -963,7 +965,7 @@
       },
       "id": 15,
       "panels": [],
-      "title": "Panel 15",
+      "title": "分析区域 15",
       "type": "row"
     },
     {
