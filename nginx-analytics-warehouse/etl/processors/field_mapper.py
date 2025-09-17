@@ -10,7 +10,7 @@ Field Mapper - Maps base format logs to DWD table structure
 import re
 import logging
 from datetime import datetime, date
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 from urllib.parse import urlparse, parse_qs
 
 class FieldMapper:
@@ -21,25 +21,104 @@ class FieldMapper:
         
         # 初始化用户代理解析器
         self.user_agent_patterns = self._init_user_agent_patterns()
+        # 增强解析规则
+        try:
+            self.enhanced_ua_patterns = self._init_enhanced_user_agent_patterns()
+        except Exception as e:
+            self.logger.warning(f"增强解析规则初始化失败: {e}")
+            self.enhanced_ua_patterns = {}
         
     def _init_user_agent_patterns(self) -> Dict[str, str]:
-        """初始化用户代理解析模式"""
+        """初始化用户代理解析模式 - 增强版"""
         return {
             # 移动端检测
             'mobile': r'Mobile|Android|iPhone|iPad|Windows Phone',
             'ios': r'iPhone|iPad|iOS',
             'android': r'Android',
+            'harmonyos': r'HarmonyOS|Harmony|鸿蒙',
             'wechat': r'MicroMessenger|WeChat',
             'alipay': r'AlipayClient|AliApp',
-            
+
             # 浏览器检测
             'chrome': r'Chrome/([0-9.]+)',
             'safari': r'Safari/([0-9.]+)',
             'firefox': r'Firefox/([0-9.]+)',
-            
+
             # 设备类型
             'bot': r'bot|crawler|spider|scraper|slurp',
             'sdk': r'SDK|API|Client'
+        }
+
+    def _init_enhanced_user_agent_patterns(self) -> Dict[str, Dict[str, str]]:
+        """增强的User-Agent识别规则库"""
+        return {
+            # === 操作系统增强识别 ===
+            'os_patterns': {
+                'ios': r'iPhone|iPad|iPod|iOS[\s/]([0-9._]+)',
+                'android': r'Android[\s/]([0-9._]+)',
+                'harmonyos': r'HarmonyOS|Harmony[\s/]([0-9._]+)|鸿蒙',
+                'windows': r'Windows[\s/]([0-9._]+)|Win32|Win64',
+                'macos': r'Mac\s?OS\s?X[\s/]([0-9._]+)|macOS',
+                'linux': r'Linux|Ubuntu|Debian|CentOS',
+            },
+
+            # === 设备类型增强识别 ===
+            'device_patterns': {
+                'smartphone': r'iPhone|Android.*Mobile|Mobile.*Android',
+                'tablet': r'iPad|Android.*Tablet|Tablet.*Android',
+                'desktop': r'Windows.*Chrome|Mac.*Safari|Linux.*Firefox',
+                'tv': r'SmartTV|TV|AndroidTV|AppleTV',
+                'iot': r'IoT|SmartDevice|HomeKit',
+                'automotive': r'CarPlay|AndroidAuto|Automotive',
+            },
+
+            # === 小程序和应用识别 ===
+            'miniprogram_patterns': {
+                'wechat_miniprogram': r'miniProgram|小程序|MicroMessenger.*miniprogram',
+                'alipay_miniprogram': r'AliApp.*miniprogram|支付宝小程序',
+                'douyin_miniprogram': r'toutiaomicroapp|抖音小程序|BytedanceMicroApp',
+                'baidu_miniprogram': r'baiduboxapp.*swan|百度小程序',
+                'qq_miniprogram': r'QQ.*miniprogram|QQ小程序',
+            },
+
+            # === 政务和专业应用识别 ===
+            'government_app_patterns': {
+                'zgt_ios': r'zgt-ios/([0-9.]+)',
+                'zgt_android': r'zgt-android/([0-9.]+)',
+                'gov_app': r'gov-app|政务|zwfw|gxrz',
+                'e_government': r'e-gov|电子政务|政务服务|一网通办',
+            },
+
+            # === SDK和框架识别 ===
+            'sdk_patterns': {
+                'wst_sdk_ios': r'WST-SDK-iOS/([0-9.]+)',
+                'wst_sdk_android': r'WST-SDK-ANDROID/([0-9.]+)',
+                'react_native': r'ReactNative|RN/([0-9.]+)',
+                'flutter': r'Flutter|Dart/([0-9.]+)',
+                'cordova': r'Cordova|PhoneGap',
+                'ionic': r'Ionic/([0-9.]+)',
+            },
+
+            # === Bot和爬虫详细识别 ===
+            'bot_patterns': {
+                'search_engine_bot': {
+                    'googlebot': r'Googlebot/([0-9.]+)',
+                    'baiduspider': r'Baiduspider/([0-9.]+)',
+                    'bingbot': r'bingbot/([0-9.]+)',
+                    'yandexbot': r'YandexBot/([0-9.]+)',
+                    'sogoubot': r'Sogou.*Spider/([0-9.]+)',
+                },
+                'social_media_bot': {
+                    'facebookbot': r'facebookexternalhit/([0-9.]+)',
+                    'twitterbot': r'Twitterbot/([0-9.]+)',
+                    'linkedinbot': r'LinkedInBot/([0-9.]+)',
+                },
+                'monitoring_bot': {
+                    'uptimerobot': r'UptimeRobot/([0-9.]+)',
+                    'pingdom': r'Pingdom.com_bot/([0-9.]+)',
+                    'site24x7': r'Site24x7/([0-9.]+)',
+                },
+            }
         }
     
     def map_to_dwd(self, parsed_data: Dict[str, Any], source_file: str = '') -> Dict[str, Any]:
@@ -319,11 +398,17 @@ class FieldMapper:
         dwd_record['sdk_version'] = ua_info['sdk_version']
         dwd_record['bot_type'] = ua_info['bot_type']
         
-        # 来源分析
+        # 来源分析 - 增强版
         referer = parsed_data.get('http_referer', '')
         dwd_record['entry_source'] = self._classify_entry_source(referer)
         dwd_record['search_engine'] = self._detect_search_engine(referer)
         dwd_record['social_media'] = self._detect_social_media(referer)
+
+        # 增强域名分类字段
+        referer_domain = self._extract_domain(referer)
+        dwd_record['referer_domain_type'] = self._get_domain_type(referer_domain)
+        dwd_record['referer_trust_level'] = self._assess_domain_trust(referer_domain)
+        dwd_record['traffic_quality_score'] = self._calculate_traffic_quality(referer, parsed_data)
         
         # 使用新的URI解析策略获取核心信息
         uri = dwd_record['request_uri']
@@ -334,12 +419,17 @@ class FieldMapper:
         dwd_record['service_name'] = self._extract_service_name(uri)
         dwd_record['api_module'] = self._extract_api_module(uri)
         
-        # 分类字段
+        # 分类字段 - 增强版
         dwd_record['api_category'] = self._classify_api_category(uri)
         dwd_record['api_version'] = self._extract_api_version(uri)
         dwd_record['business_domain'] = self._classify_business_domain(uri)
         dwd_record['access_type'] = self._classify_access_type_old(user_agent, uri)
         dwd_record['client_category'] = self._classify_client_category(user_agent)
+
+        # 增强业务分析字段
+        dwd_record['api_complexity_level'] = self._assess_api_complexity(uri, parsed_uri)
+        dwd_record['api_importance_score'] = self._calculate_api_importance_score(parsed_uri, parsed_data)
+        dwd_record['business_priority'] = self._assess_business_priority(parsed_uri, parsed_data)
         # 业务标识提取 - 基于多源信息
         dwd_record['business_sign'] = self._extract_business_sign(parsed_data, uri)
         
@@ -803,6 +893,428 @@ class FieldMapper:
             'sdk_version': '',
             'bot_type': ''
         }
+
+    def _parse_user_agent_enhanced(self, user_agent: str) -> Dict[str, Any]:
+        """
+        增强的User-Agent智能解析
+
+        Args:
+            user_agent: 原始User-Agent字符串
+
+        Returns:
+            Dict包含详细的解析结果
+        """
+        if not user_agent:
+            return self._get_empty_ua_result()
+
+        ua_lower = user_agent.lower()
+        patterns = self._init_enhanced_user_agent_patterns()
+
+        result = {
+            # === 基础分类 ===
+            'platform': '',
+            'platform_category': '',
+            'device_type': '',
+            'os_type': '',
+            'os_version': '',
+            'browser_type': '',
+            'browser_version': '',
+
+            # === 应用信息 ===
+            'app_type': '',
+            'app_version': '',
+            'is_miniprogram': False,
+            'miniprogram_host': '',
+
+            # === SDK信息 ===
+            'sdk_type': '',
+            'sdk_version': '',
+            'integration_type': '',
+            'framework_type': '',
+
+            # === Bot识别 ===
+            'is_bot': False,
+            'bot_type': '',
+            'bot_name': '',
+            'bot_category': '',
+            'bot_probability': 0.0,
+
+            # === 特殊应用 ===
+            'is_government_app': False,
+            'government_app_type': '',
+
+            # === 详细技术信息 ===
+            'browser_engine': '',
+            'rendering_engine': '',
+            'webview_type': '',
+
+            # === 质量评估 ===
+            'parsing_confidence': 0.0,
+            'parsing_completeness': 0.0,
+        }
+
+        try:
+            # 1. 操作系统识别
+            result.update(self._identify_operating_system(user_agent, patterns))
+
+            # 2. 设备类型识别
+            result.update(self._identify_device_type(user_agent, patterns))
+
+            # 3. 浏览器和引擎识别
+            result.update(self._identify_browser_engine(user_agent, patterns))
+
+            # 4. 应用类型识别（包含小程序）
+            result.update(self._identify_application_type(user_agent, patterns))
+
+            # 5. SDK和框架识别
+            result.update(self._identify_sdk_framework(user_agent, patterns))
+
+            # 6. Bot和爬虫识别
+            result.update(self._identify_bot_crawler(user_agent, patterns))
+
+            # 7. 政务应用专项识别
+            result.update(self._identify_government_app(user_agent, patterns))
+
+            # 8. 平台综合判断
+            result['platform'] = self._determine_platform(result)
+            result['platform_category'] = self._determine_platform_category(result)
+
+            # 9. 解析质量评估
+            result.update(self._assess_parsing_quality(result, user_agent))
+
+            return result
+
+        except Exception as e:
+            self.logger.warning(f"User-Agent解析失败: {str(e)}, UA: {user_agent[:100]}")
+            return self._get_error_ua_result(user_agent, str(e))
+
+    def _identify_operating_system(self, user_agent: str, patterns: Dict) -> Dict[str, str]:
+        """操作系统识别算法"""
+        os_patterns = patterns['os_patterns']
+
+        for os_name, pattern in os_patterns.items():
+            match = re.search(pattern, user_agent, re.IGNORECASE)
+            if match:
+                version = match.group(1) if match.groups() else ''
+                return {
+                    'os_type': self._standardize_os_name(os_name),
+                    'os_version': self._standardize_version(version),
+                    'os_architecture': self._determine_architecture(user_agent, os_name)
+                }
+
+        return {'os_type': 'Unknown', 'os_version': '', 'os_architecture': ''}
+
+    def _identify_government_app(self, user_agent: str, patterns: Dict) -> Dict[str, Any]:
+        """政务应用专项识别"""
+        gov_patterns = patterns['government_app_patterns']
+
+        for app_type, pattern in gov_patterns.items():
+            if re.search(pattern, user_agent, re.IGNORECASE):
+                return {
+                    'is_government_app': True,
+                    'government_app_type': app_type,
+                    'business_domain': self._map_gov_app_to_business_domain(app_type)
+                }
+
+        # 基于域名和来源的政务应用推断
+        if any(keyword in user_agent.lower() for keyword in ['gov.cn', 'zwfw', 'gxzf', '政务']):
+            return {
+                'is_government_app': True,
+                'government_app_type': 'inferred_government',
+                'business_domain': 'government_service'
+            }
+
+        return {
+            'is_government_app': False,
+            'government_app_type': '',
+            'business_domain': ''
+        }
+
+    def _identify_application_type(self, user_agent: str, patterns: Dict) -> Dict[str, Any]:
+        """应用类型识别（包含小程序检测）"""
+        miniprogram_patterns = patterns['miniprogram_patterns']
+
+        # 检测小程序
+        for miniprogram_type, pattern in miniprogram_patterns.items():
+            if re.search(pattern, user_agent, re.IGNORECASE):
+                return {
+                    'is_miniprogram': True,
+                    'miniprogram_host': miniprogram_type.replace('_miniprogram', ''),
+                    'app_type': 'miniprogram',
+                    'integration_type': 'miniprogram'
+                }
+
+        # 检测其他应用类型
+        app_indicators = {
+            'native_app': ['CFNetwork', 'NSURLSession', 'okhttp', 'Alamofire'],
+            'hybrid_app': ['WebView', 'wv)', 'Hybrid'],
+            'pwa': ['ServiceWorker', 'PWA'],
+        }
+
+        for app_type, indicators in app_indicators.items():
+            if any(indicator in user_agent for indicator in indicators):
+                return {
+                    'is_miniprogram': False,
+                    'app_type': app_type,
+                    'integration_type': app_type
+                }
+
+        return {
+            'is_miniprogram': False,
+            'app_type': 'unknown',
+            'integration_type': 'unknown'
+        }
+
+    def _identify_bot_crawler(self, user_agent: str, patterns: Dict) -> Dict[str, Any]:
+        """Bot和爬虫智能识别"""
+        bot_patterns = patterns['bot_patterns']
+
+        # Bot概率评分算法
+        bot_score = 0.0
+        bot_indicators = []
+
+        # 1. 明确的Bot标识检测
+        for category, bots in bot_patterns.items():
+            if isinstance(bots, dict):
+                for bot_name, pattern in bots.items():
+                    if re.search(pattern, user_agent, re.IGNORECASE):
+                        return {
+                            'is_bot': True,
+                            'bot_type': category,
+                            'bot_name': bot_name,
+                            'bot_category': self._classify_bot_category(category),
+                            'bot_probability': 1.0
+                        }
+
+        # 2. Bot行为模式检测
+        bot_indicators_patterns = [
+            (r'bot|crawler|spider|scraper', 0.8),
+            (r'curl|wget|python|java|go-http', 0.6),
+            (r'automated|script|tool|monitor', 0.4),
+            (r'^[A-Za-z0-9\-_]+/[0-9.]+$', 0.3),  # 简单格式 "AppName/Version"
+        ]
+
+        for pattern, score in bot_indicators_patterns:
+            if re.search(pattern, user_agent, re.IGNORECASE):
+                bot_score += score
+                bot_indicators.append(pattern)
+
+        # 3. 反向指标检测（明确的人类用户标识）
+        human_indicators = [
+            r'Mozilla/[0-9.]+.*\([^)]*\).*',  # 标准浏览器格式
+            r'Mobile|Phone|Tablet|Desktop',    # 设备类型
+            r'Safari|Chrome|Firefox|Edge',     # 主流浏览器
+        ]
+
+        human_score = 0.0
+        for pattern in human_indicators:
+            if re.search(pattern, user_agent, re.IGNORECASE):
+                human_score += 0.3
+
+        # 4. 最终判断
+        final_bot_probability = max(0.0, min(1.0, bot_score - human_score))
+        is_bot = final_bot_probability > 0.5
+
+        return {
+            'is_bot': is_bot,
+            'bot_type': 'suspected_bot' if is_bot and bot_score < 0.8 else '',
+            'bot_name': 'unknown_bot' if is_bot else '',
+            'bot_category': 'suspicious' if is_bot and bot_score < 0.8 else '',
+            'bot_probability': final_bot_probability
+        }
+
+    def _get_empty_ua_result(self) -> Dict[str, Any]:
+        """返回空的UA解析结果"""
+        return {
+            'platform': 'unknown',
+            'platform_category': 'unknown',
+            'device_type': 'unknown',
+            'os_type': 'unknown',
+            'os_version': '',
+            'browser_type': 'unknown',
+            'browser_version': '',
+            'app_type': 'unknown',
+            'app_version': '',
+            'is_miniprogram': False,
+            'miniprogram_host': '',
+            'sdk_type': '',
+            'sdk_version': '',
+            'integration_type': 'unknown',
+            'framework_type': '',
+            'is_bot': False,
+            'bot_type': '',
+            'bot_name': '',
+            'bot_category': '',
+            'bot_probability': 0.0,
+            'is_government_app': False,
+            'government_app_type': '',
+            'browser_engine': '',
+            'rendering_engine': '',
+            'webview_type': '',
+            'parsing_confidence': 0.0,
+            'parsing_completeness': 0.0,
+        }
+
+    # 辅助方法实现
+    def _standardize_os_name(self, os_name: str) -> str:
+        """标准化操作系统名称"""
+        mapping = {
+            'ios': 'iOS',
+            'android': 'Android',
+            'harmonyos': 'HarmonyOS',
+            'windows': 'Windows',
+            'macos': 'macOS',
+            'linux': 'Linux'
+        }
+        return mapping.get(os_name.lower(), os_name)
+
+    def _standardize_version(self, version: str) -> str:
+        """标准化版本号"""
+        if not version:
+            return ''
+        return version.replace('_', '.').strip()
+
+    def _determine_architecture(self, user_agent: str, os_name: str) -> str:
+        """判断系统架构"""
+        if 'arm64' in user_agent.lower() or 'aarch64' in user_agent.lower():
+            return 'arm64'
+        elif 'arm' in user_agent.lower():
+            return 'arm'
+        elif 'x64' in user_agent.lower() or 'x86_64' in user_agent.lower():
+            return 'x64'
+        elif 'x86' in user_agent.lower():
+            return 'x86'
+        return 'unknown'
+
+    def _map_gov_app_to_business_domain(self, app_type: str) -> str:
+        """政务应用类型映射到业务域"""
+        mapping = {
+            'zgt_ios': 'government_service',
+            'zgt_android': 'government_service',
+            'gov_app': 'government_service',
+            'e_government': 'government_service',
+            'inferred_government': 'government_service'
+        }
+        return mapping.get(app_type, 'unknown')
+
+    def _classify_bot_category(self, bot_type: str) -> str:
+        """Bot分类"""
+        mapping = {
+            'search_engine_bot': 'legitimate',
+            'social_media_bot': 'legitimate',
+            'monitoring_bot': 'legitimate',
+            'suspected_bot': 'suspicious'
+        }
+        return mapping.get(bot_type, 'unknown')
+
+    def _determine_platform(self, result: Dict[str, Any]) -> str:
+        """综合判断平台类型"""
+        if result.get('is_government_app'):
+            return f"Government-{result.get('os_type', 'Unknown')}"
+        elif result.get('is_miniprogram'):
+            return f"MiniProgram-{result.get('miniprogram_host', 'Unknown')}"
+        elif result.get('is_bot'):
+            return 'Bot'
+        else:
+            return result.get('os_type', 'Unknown')
+
+    def _determine_platform_category(self, result: Dict[str, Any]) -> str:
+        """判断平台分类"""
+        device_type = result.get('device_type', '').lower()
+        if device_type in ['smartphone', 'mobile']:
+            return 'mobile'
+        elif device_type == 'tablet':
+            return 'tablet'
+        elif device_type == 'desktop':
+            return 'desktop'
+        elif device_type == 'tv':
+            return 'tv'
+        elif device_type == 'iot':
+            return 'iot'
+        return 'unknown'
+
+    def _assess_parsing_quality(self, result: Dict[str, Any], user_agent: str) -> Dict[str, float]:
+        """评估解析质量"""
+        filled_fields = sum(1 for v in result.values() if v and v != 'unknown' and v != '')
+        total_fields = len(result)
+
+        confidence = 0.8 if result.get('os_type') != 'unknown' else 0.3
+        completeness = filled_fields / total_fields if total_fields > 0 else 0.0
+
+        return {
+            'parsing_confidence': confidence,
+            'parsing_completeness': completeness
+        }
+
+    def _get_error_ua_result(self, user_agent: str, error_msg: str) -> Dict[str, Any]:
+        """返回错误情况下的UA解析结果"""
+        result = self._get_empty_ua_result()
+        result['parsing_error'] = error_msg[:200]  # 限制错误信息长度
+        return result
+
+    def _identify_device_type(self, user_agent: str, patterns: Dict) -> Dict[str, str]:
+        """设备类型识别"""
+        device_patterns = patterns.get('device_patterns', {})
+
+        for device_type, pattern in device_patterns.items():
+            if re.search(pattern, user_agent, re.IGNORECASE):
+                return {'device_type': device_type}
+
+        # 默认判断逻辑
+        if any(keyword in user_agent.lower() for keyword in ['mobile', 'phone', 'android', 'iphone']):
+            return {'device_type': 'smartphone'}
+        elif 'ipad' in user_agent.lower() or 'tablet' in user_agent.lower():
+            return {'device_type': 'tablet'}
+        elif any(keyword in user_agent.lower() for keyword in ['windows', 'mac', 'linux']):
+            return {'device_type': 'desktop'}
+
+        return {'device_type': 'unknown'}
+
+    def _identify_browser_engine(self, user_agent: str, patterns: Dict) -> Dict[str, str]:
+        """浏览器和引擎识别"""
+        browser_info = {}
+
+        # 基础浏览器识别
+        browser_patterns = {
+            'Chrome': r'Chrome/([0-9.]+)',
+            'Safari': r'Version/([0-9.]+).*Safari',
+            'Firefox': r'Firefox/([0-9.]+)',
+            'Edge': r'Edg(?:e)?/([0-9.]+)',
+            'Opera': r'(?:Opera|OPR)/([0-9.]+)',
+        }
+
+        for browser, pattern in browser_patterns.items():
+            match = re.search(pattern, user_agent)
+            if match:
+                browser_info['browser_type'] = browser
+                browser_info['browser_version'] = match.group(1)
+                break
+
+        # 渲染引擎识别
+        if 'webkit' in user_agent.lower():
+            browser_info['browser_engine'] = 'WebKit'
+        elif 'gecko' in user_agent.lower():
+            browser_info['browser_engine'] = 'Gecko'
+        elif 'trident' in user_agent.lower():
+            browser_info['browser_engine'] = 'Trident'
+
+        return browser_info
+
+    def _identify_sdk_framework(self, user_agent: str, patterns: Dict) -> Dict[str, str]:
+        """SDK和框架识别"""
+        sdk_patterns = patterns.get('sdk_patterns', {})
+
+        for sdk_type, pattern in sdk_patterns.items():
+            match = re.search(pattern, user_agent, re.IGNORECASE)
+            if match:
+                version = match.group(1) if match.groups() else ''
+                return {
+                    'sdk_type': sdk_type,
+                    'sdk_version': version,
+                    'framework_type': sdk_type.lower().replace('_', '-')
+                }
+
+        return {'sdk_type': '', 'sdk_version': '', 'framework_type': ''}
     
     def _classify_api_category(self, uri: str) -> str:
         """分类API分类 - 基于新的URI解析策略"""
@@ -991,46 +1503,241 @@ class FieldMapper:
         return ''
     
     def _classify_business_domain(self, uri: str) -> str:
-        """分类业务域 - 基于新的URI解析策略的精确分类"""
+        """分类业务域 - 增强版智能分类"""
         if not uri:
             return 'unknown'
-        
+
         parsed = self._parse_uri_structure(uri)
         app_name = parsed['application_name']
         service_name = parsed['service_name']
         api_module = parsed['api_module']
-        
-        # 基于应用和服务的精确业务域分类
+
+        # 增强的业务域分类逻辑
+        domain = self._analyze_business_domain_advanced(app_name, service_name, api_module, uri)
+
+        return domain
+
+    def _analyze_business_domain_advanced(self, app_name: str, service_name: str, api_module: str, uri: str) -> str:
+        """高级业务域分析"""
+
+        # 1. 基于应用架构的精确分类
         if app_name == 'scmp-gateway':
-            # 根据服务名进一步细分
-            service_domain_mapping = {
-                'gxrz-rest': 'user-auth',      # 用户认证
-                'alipay': 'payment',           # 支付服务
-                'column': 'content',           # 内容服务
-                'thirdSpecial': 'third-party', # 第三方服务
-                'zww': 'government',           # 政务服务
-            }
-            return service_domain_mapping.get(service_name, 'gateway')
-            
+            return self._classify_gateway_business(service_name, api_module)
+
         elif app_name == 'zgt-h5':
-            return 'h5-frontend'
-            
+            return self._classify_h5_business(service_name, api_module, uri)
+
         elif app_name == 'group1':
-            return 'file-storage'
-            
+            return self._classify_file_business(service_name, api_module)
+
+        # 2. 基于API路径模式的智能识别
+        business_patterns = self._get_business_patterns()
+        for domain, patterns in business_patterns.items():
+            if self._matches_business_pattern(uri, patterns):
+                return domain
+
+        # 3. 基于关键词的语义分析
+        return self._classify_by_semantic_analysis(app_name, service_name, api_module)
+
+    def _classify_gateway_business(self, service_name: str, api_module: str) -> str:
+        """网关业务分类"""
+        # 精确的服务映射
+        service_mappings = {
+            'gxrz-rest': self._analyze_auth_business(api_module),
+            'alipay': 'payment-service',
+            'column': 'content-management',
+            'thirdSpecial': 'third-party-integration',
+            'zww': 'government-service',
+            'weixinJsSdkSign': 'wechat-integration',
+            'appKind': 'app-configuration'
+        }
+
+        return service_mappings.get(service_name, 'gateway-proxy')
+
+    def _analyze_auth_business(self, api_module: str) -> str:
+        """认证业务细分"""
+        auth_patterns = {
+            'user-registration': ['newUser', 'register', 'signup'],
+            'user-authentication': ['login', 'auth', 'token', 'verify'],
+            'user-management': ['userInfo', 'profile', 'update', 'bind'],
+            'session-management': ['session', 'logout', 'refresh']
+        }
+
+        for business, patterns in auth_patterns.items():
+            if any(pattern.lower() in api_module.lower() for pattern in patterns):
+                return business
+
+        return 'user-auth-general'
+
+    def _classify_h5_business(self, service_name: str, api_module: str, uri: str) -> str:
+        """H5应用业务分类"""
+        if service_name in ['js', 'css', 'images', 'fonts']:
+            return 'static-assets'
+        elif service_name == 'pages':
+            return 'page-routing'
+        elif 'api' in uri.lower():
+            return 'h5-api-service'
         else:
-            # 通用映射
-            domain_mapping = {
-                'api': 'api-service',
-                'admin': 'admin-service',
-                'user': 'user-service',
-                'auth': 'auth-service',
-                'upload': 'file-service',
-                'download': 'file-service',
-                'search': 'search-service',
-                'notification': 'message-service'
-            }
-            return domain_mapping.get(app_name, app_name)
+            return 'h5-frontend-general'
+
+    def _classify_file_business(self, service_name: str, api_module: str) -> str:
+        """文件服务业务分类"""
+        file_patterns = {
+            'image-storage': ['M00', 'M01'],  # 图片存储
+            'document-storage': ['M02', 'M03'],  # 文档存储
+            'media-storage': ['M04', 'M05']   # 媒体存储
+        }
+
+        for business, patterns in file_patterns.items():
+            if service_name in patterns:
+                return business
+
+        return 'file-storage-general'
+
+    def _get_business_patterns(self) -> Dict[str, List[str]]:
+        """获取业务模式识别规则"""
+        return {
+            'user-service': ['/user/', '/users/', '/account/', '/profile/'],
+            'auth-service': ['/auth/', '/login/', '/logout/', '/token/', '/oauth/'],
+            'payment-service': ['/pay/', '/payment/', '/bill/', '/order/', '/transaction/'],
+            'content-service': ['/content/', '/article/', '/news/', '/cms/', '/column/'],
+            'file-service': ['/upload/', '/download/', '/file/', '/attachment/', '/media/'],
+            'search-service': ['/search/', '/query/', '/find/', '/filter/'],
+            'notification-service': ['/notify/', '/message/', '/mail/', '/sms/'],
+            'admin-service': ['/admin/', '/manage/', '/system/', '/config/'],
+            'api-gateway': ['/gateway/', '/proxy/', '/route/'],
+            'monitoring-service': ['/health/', '/metrics/', '/status/', '/monitor/'],
+            'integration-service': ['/webhook/', '/callback/', '/sync/', '/import/']
+        }
+
+    def _matches_business_pattern(self, uri: str, patterns: List[str]) -> bool:
+        """检查URI是否匹配业务模式"""
+        uri_lower = uri.lower()
+        return any(pattern in uri_lower for pattern in patterns)
+
+    def _classify_by_semantic_analysis(self, app_name: str, service_name: str, api_module: str) -> str:
+        """基于语义分析的业务分类"""
+        # 关键词权重分析
+        keywords_mapping = {
+            'user': 'user-service',
+            'auth': 'auth-service',
+            'pay': 'payment-service',
+            'file': 'file-service',
+            'admin': 'admin-service',
+            'api': 'api-service',
+            'content': 'content-service',
+            'search': 'search-service',
+            'message': 'notification-service'
+        }
+
+        # 分析所有字段中的关键词
+        all_text = f"{app_name} {service_name} {api_module}".lower()
+
+        for keyword, domain in keywords_mapping.items():
+            if keyword in all_text:
+                return domain
+
+        # 默认分类
+        if app_name != 'unknown':
+            return f"{app_name}-service"
+        else:
+            return 'general-service'
+
+    def _assess_api_complexity(self, uri: str, parsed_uri: Dict[str, Any]) -> str:
+        """评估API复杂度等级"""
+        if not uri:
+            return 'unknown'
+
+        complexity_score = 0
+
+        # 路径深度评分
+        depth = parsed_uri.get('path_depth', 0)
+        if depth <= 2:
+            complexity_score += 1  # 简单
+        elif depth <= 4:
+            complexity_score += 2  # 中等
+        else:
+            complexity_score += 3  # 复杂
+
+        # 参数复杂度评分
+        if '?' in uri:
+            query_params = uri.split('?')[1] if '?' in uri else ''
+            param_count = len(query_params.split('&')) if query_params else 0
+            if param_count <= 2:
+                complexity_score += 1
+            elif param_count <= 5:
+                complexity_score += 2
+            else:
+                complexity_score += 3
+
+        # 业务逻辑复杂度评分
+        complex_keywords = ['bind', 'auth', 'payment', 'encrypt', 'decrypt', 'transform']
+        if any(keyword in uri.lower() for keyword in complex_keywords):
+            complexity_score += 2
+
+        # 根据总分确定复杂度等级
+        if complexity_score <= 2:
+            return 'simple'
+        elif complexity_score <= 4:
+            return 'medium'
+        elif complexity_score <= 6:
+            return 'complex'
+        else:
+            return 'very-complex'
+
+    def _calculate_api_importance_score(self, parsed_uri: Dict[str, Any], parsed_data: Dict[str, Any]) -> int:
+        """计算API重要性评分 (0-100)"""
+        score = 30  # 基础分
+
+        app_name = parsed_uri.get('application_name', '')
+        service_name = parsed_uri.get('service_name', '')
+        api_module = parsed_uri.get('api_module', '')
+
+        # 应用类型权重
+        app_weights = {
+            'scmp-gateway': 30,  # 网关最重要
+            'zgt-h5': 20,       # H5应用中等重要
+            'group1': 15        # 文件服务一般重要
+        }
+        score += app_weights.get(app_name, 10)
+
+        # 服务类型权重
+        service_weights = {
+            'gxrz-rest': 25,    # 认证服务高权重
+            'alipay': 25,       # 支付服务高权重
+            'zww': 20,          # 政务服务中高权重
+            'column': 15,       # 内容服务中等权重
+            'thirdSpecial': 10  # 第三方服务一般权重
+        }
+        score += service_weights.get(service_name, 5)
+
+        # 关键业务功能加权
+        critical_keywords = ['login', 'auth', 'payment', 'user', 'bind']
+        if any(keyword in api_module.lower() for keyword in critical_keywords):
+            score += 20
+
+        # 访问频率影响（基于状态码推测）
+        status_code = parsed_data.get('status', '200')
+        if status_code == '200':
+            score += 5  # 成功访问加分
+
+        return min(100, max(0, score))
+
+    def _assess_business_priority(self, parsed_uri: Dict[str, Any], parsed_data: Dict[str, Any]) -> str:
+        """评估业务优先级"""
+        importance_score = self._calculate_api_importance_score(parsed_uri, parsed_data)
+
+        # 根据重要性评分确定优先级
+        if importance_score >= 80:
+            return 'critical'
+        elif importance_score >= 60:
+            return 'high'
+        elif importance_score >= 40:
+            return 'medium'
+        elif importance_score >= 20:
+            return 'low'
+        else:
+            return 'minimal'
     
     def _classify_access_type_old(self, user_agent: str, uri: str) -> str:
         """分类访问类型 - 基于User-Agent和URI的综合判断，更精确的分类"""
@@ -1142,40 +1849,245 @@ class FieldMapper:
         return second_level if second_level else 'unknown'
     
     def _classify_entry_source(self, referer: str) -> str:
-        """分类入口来源"""
+        """分类入口来源 - 增强版"""
         if not referer or referer == '-':
             return 'direct'
-        
-        if 'google' in referer.lower():
+
+        domain = self._extract_domain(referer).lower()
+
+        # 政府域名识别
+        if self._is_government_domain(domain):
+            return 'government'
+
+        # 搜索引擎识别
+        if self._detect_search_engine(referer):
             return 'search'
-        elif 'baidu' in referer.lower():
-            return 'search'
-        else:
-            return 'referral'
-    
+
+        # 社交媒体识别
+        if self._detect_social_media(referer):
+            return 'social'
+
+        # 电商平台识别
+        if self._is_ecommerce_domain(domain):
+            return 'ecommerce'
+
+        # 新闻媒体识别
+        if self._is_news_domain(domain):
+            return 'news'
+
+        # 内部来源识别
+        if self._is_internal_domain(domain):
+            return 'internal'
+
+        return 'referral'
+
     def _detect_search_engine(self, referer: str) -> str:
-        """检测搜索引擎"""
+        """检测搜索引擎 - 增强版"""
         if not referer or referer == '-':
             return ''
-        
-        if 'google' in referer.lower():
-            return 'google'
-        elif 'baidu' in referer.lower():
-            return 'baidu'
-        
+
+        domain = self._extract_domain(referer).lower()
+
+        # 主流搜索引擎识别
+        search_engines = {
+            'google': ['google.com', 'google.cn', 'google.com.hk'],
+            'baidu': ['baidu.com', 'baidu.cn'],
+            'bing': ['bing.com', 'cn.bing.com'],
+            'sogou': ['sogou.com'],
+            'so': ['so.com', '360.cn'],
+            'shenma': ['sm.cn'],
+            'yandex': ['yandex.com', 'yandex.ru'],
+            'yahoo': ['yahoo.com', 'yahoo.cn'],
+            'duckduckgo': ['duckduckgo.com']
+        }
+
+        for engine, domains in search_engines.items():
+            if any(engine_domain in domain for engine_domain in domains):
+                return engine
+
         return ''
-    
+
     def _detect_social_media(self, referer: str) -> str:
-        """检测社交媒体"""
+        """检测社交媒体 - 增强版"""
         if not referer or referer == '-':
             return ''
-        
-        if 'weibo' in referer.lower():
-            return 'weibo'
-        elif 'wechat' in referer.lower():
-            return 'wechat'
-        
+
+        domain = self._extract_domain(referer).lower()
+
+        # 社交媒体平台识别
+        social_platforms = {
+            'wechat': ['weixin.qq.com', 'wx.qq.com'],
+            'weibo': ['weibo.com', 'weibo.cn'],
+            'qq': ['qq.com', 'qzone.qq.com'],
+            'douyin': ['douyin.com'],
+            'xiaohongshu': ['xiaohongshu.com', 'xhscdn.com'],
+            'zhihu': ['zhihu.com'],
+            'bilibili': ['bilibili.com', 'b23.tv'],
+            'facebook': ['facebook.com', 'fb.com'],
+            'twitter': ['twitter.com', 't.co'],
+            'linkedin': ['linkedin.com'],
+            'instagram': ['instagram.com']
+        }
+
+        for platform, domains in social_platforms.items():
+            if any(social_domain in domain for social_domain in domains):
+                return platform
+
         return ''
+
+    def _is_government_domain(self, domain: str) -> bool:
+        """判断是否政府域名"""
+        if not domain:
+            return False
+
+        # 政府域名特征
+        gov_indicators = [
+            '.gov.cn', '.gov',
+            'beijing.gov.cn', 'shanghai.gov.cn',
+            'zwfw.', 'zzrs.', 'rsj.',
+            'police.', 'court.', 'procuratorate.'
+        ]
+
+        return any(indicator in domain for indicator in gov_indicators)
+
+    def _is_ecommerce_domain(self, domain: str) -> bool:
+        """判断是否电商域名"""
+        if not domain:
+            return False
+
+        ecommerce_domains = [
+            'taobao.com', 'tmall.com', 'jd.com', 'pdd.com',
+            'suning.com', 'vip.com', 'dangdang.com',
+            'amazon.com', 'ebay.com'
+        ]
+
+        return any(ecom_domain in domain for ecom_domain in ecommerce_domains)
+
+    def _is_news_domain(self, domain: str) -> bool:
+        """判断是否新闻媒体域名"""
+        if not domain:
+            return False
+
+        news_domains = [
+            'sina.com.cn', 'sohu.com', 'qq.com',
+            'people.com.cn', 'xinhuanet.com', 'chinanews.com',
+            'ifeng.com', 'caixin.com', 'thepaper.cn'
+        ]
+
+        return any(news_domain in domain for news_domain in news_domains)
+
+    def _is_internal_domain(self, domain: str) -> bool:
+        """判断是否内部域名"""
+        if not domain:
+            return False
+
+        # 内部域名特征
+        internal_indicators = [
+            'localhost', '127.0.0.1',
+            '.local', '.internal', '.corp',
+            '.test', '.dev'
+        ]
+
+        return any(indicator in domain for indicator in internal_indicators)
+
+    def _get_domain_type(self, domain: str) -> str:
+        """获取域名类型分类"""
+        if not domain:
+            return 'unknown'
+
+        domain_lower = domain.lower()
+
+        # 按优先级分类
+        if self._is_government_domain(domain_lower):
+            return 'government'
+        elif self._is_ecommerce_domain(domain_lower):
+            return 'ecommerce'
+        elif self._is_news_domain(domain_lower):
+            return 'news'
+        elif self._is_internal_domain(domain_lower):
+            return 'internal'
+        elif 'edu.cn' in domain_lower or '.edu' in domain_lower:
+            return 'education'
+        elif 'mil.cn' in domain_lower or '.mil' in domain_lower:
+            return 'military'
+        elif any(ext in domain_lower for ext in ['.org', '.com', '.cn', '.net']):
+            return 'commercial'
+        else:
+            return 'other'
+
+    def _assess_domain_trust(self, domain: str) -> str:
+        """评估域名信任级别"""
+        if not domain:
+            return 'unknown'
+
+        domain_lower = domain.lower()
+
+        # 高信任度域名
+        high_trust_indicators = [
+            '.gov.cn', '.gov', '.edu.cn', '.edu',
+            'beijing.gov.cn', 'shanghai.gov.cn',
+            'tsinghua.edu.cn', 'pku.edu.cn'
+        ]
+
+        # 中等信任度域名
+        medium_trust_indicators = [
+            '.com', '.cn', '.org', '.net',
+            'google.com', 'baidu.com', 'qq.com'
+        ]
+
+        # 低信任度指标
+        low_trust_indicators = [
+            'bit.ly', 't.co', 'tinyurl.com',
+            'short.link', '7.ke'
+        ]
+
+        if any(indicator in domain_lower for indicator in high_trust_indicators):
+            return 'high'
+        elif any(indicator in domain_lower for indicator in low_trust_indicators):
+            return 'low'
+        elif any(indicator in domain_lower for indicator in medium_trust_indicators):
+            return 'medium'
+        else:
+            return 'unknown'
+
+    def _calculate_traffic_quality(self, referer: str, parsed_data: Dict[str, Any]) -> int:
+        """计算流量质量评分 (0-100)"""
+        if not referer or referer == '-':
+            return 60  # 直接访问基础分
+
+        score = 50  # 基础分
+
+        # 来源类型加分
+        source_type = self._classify_entry_source(referer)
+        source_scores = {
+            'government': 25,  # 政府来源最高加分
+            'search': 20,      # 搜索引擎高加分
+            'news': 15,        # 新闻媒体中等加分
+            'social': 10,      # 社交媒体低加分
+            'ecommerce': 8,    # 电商平台低加分
+            'internal': 30,    # 内部来源高加分
+            'referral': 5      # 一般引荐低加分
+        }
+        score += source_scores.get(source_type, 0)
+
+        # 域名信任度加分
+        domain = self._extract_domain(referer)
+        trust_level = self._assess_domain_trust(domain)
+        trust_scores = {
+            'high': 15,
+            'medium': 5,
+            'low': -10,
+            'unknown': 0
+        }
+        score += trust_scores.get(trust_level, 0)
+
+        # 请求特征分析
+        status_code = parsed_data.get('status', '200')
+        if status_code == '200':
+            score += 10  # 成功请求加分
+
+        # 确保分数在合理范围内
+        return max(0, min(100, score))
     
     def _is_internal_ip(self, ip: str) -> bool:
         """判断是否内网IP"""
@@ -1580,21 +2492,63 @@ class FieldMapper:
         dwd_record['compliance_zone'] = 'default'
         
     def _map_platform_entry_fields(self, dwd_record: Dict[str, Any], parsed_data: Dict[str, Any]):
-        """映射平台入口下钻维度字段（核心功能）"""
+        """映射平台入口下钻维度字段（核心功能） - 增强版"""
         user_agent = parsed_data.get('agent', '') or ''
         server_name = parsed_data.get('http_host', '')
-        
-        # 访问入口点分析
+
+        # 使用增强的User-Agent解析
+        enhanced_ua_info = self._parse_user_agent_enhanced(user_agent)
+
+        # === 平台核心信息 ===
+        dwd_record['platform'] = enhanced_ua_info.get('platform', 'unknown')
+        dwd_record['platform_category'] = enhanced_ua_info.get('platform_category', 'unknown')
+        dwd_record['device_type'] = enhanced_ua_info.get('device_type', 'unknown')
+        dwd_record['os_type'] = enhanced_ua_info.get('os_type', 'unknown')
+        dwd_record['os_version'] = enhanced_ua_info.get('os_version', '')
+
+        # === 浏览器和应用信息 ===
+        dwd_record['browser_type'] = enhanced_ua_info.get('browser_type', 'unknown')
+        dwd_record['browser_version'] = enhanced_ua_info.get('browser_version', '')
+        dwd_record['app_version'] = enhanced_ua_info.get('app_version', '')
+
+        # === SDK和集成信息 ===
+        dwd_record['sdk_type'] = enhanced_ua_info.get('sdk_type', '')
+        dwd_record['sdk_version'] = enhanced_ua_info.get('sdk_version', '')
+        dwd_record['integration_type'] = enhanced_ua_info.get('integration_type', 'unknown')
+        dwd_record['framework_type'] = enhanced_ua_info.get('framework_type', '')
+
+        # === Bot识别信息 ===
+        dwd_record['is_bot'] = enhanced_ua_info.get('is_bot', False)
+        dwd_record['bot_type'] = enhanced_ua_info.get('bot_type', '')
+        dwd_record['bot_name'] = enhanced_ua_info.get('bot_name', '')
+        dwd_record['bot_probability'] = enhanced_ua_info.get('bot_probability', 0.0)
+        dwd_record['crawler_category'] = enhanced_ua_info.get('bot_category', '')
+
+        # === 小程序信息 ===
+        if enhanced_ua_info.get('is_miniprogram', False):
+            dwd_record['access_type'] = 'MiniProgram'
+            dwd_record['client_type'] = 'miniprogram'
+            dwd_record['integration_type'] = 'miniprogram'
+        else:
+            dwd_record['access_type'] = self._classify_access_type(user_agent)
+            dwd_record['client_type'] = self._classify_client_type(user_agent)
+
+        # === 政务应用特殊标记 ===
+        if enhanced_ua_info.get('is_government_app', False):
+            dwd_record['client_channel'] = 'government'
+            dwd_record['business_domain'] = 'government_service'
+        else:
+            dwd_record['client_channel'] = self._infer_client_channel(user_agent)
+
+        # === 其他平台相关字段 ===
         dwd_record['access_entry_point'] = self._infer_access_entry_point(server_name)
-        dwd_record['client_channel'] = self._infer_client_channel(user_agent)
-        dwd_record['client_type'] = self._classify_client_type(user_agent)
         dwd_record['traffic_source'] = self._analyze_traffic_source(parsed_data)
-        dwd_record['access_type'] = self._classify_access_type(user_agent)
-        
-        # 平台分类字段
-        platform_info = self._parse_user_agent(user_agent)
-        dwd_record['platform_category'] = self._classify_platform_category(platform_info['platform'])
-        dwd_record['platform_version'] = platform_info.get('platform_version', '')
+
+        # === 数据质量信息 ===
+        # 注意：这些字段在DWD表中可能不存在，作为调试信息
+        if hasattr(self, 'debug_mode') and self.debug_mode:
+            dwd_record['ua_parsing_confidence'] = enhanced_ua_info.get('parsing_confidence', 0.0)
+            dwd_record['ua_parsing_completeness'] = enhanced_ua_info.get('parsing_completeness', 0.0)
         
     def _map_error_analysis_fields(self, dwd_record: Dict[str, Any], parsed_data: Dict[str, Any]):
         """映射错误分析维度字段（工作介绍重点）"""
@@ -1629,14 +2583,17 @@ class FieldMapper:
     def _map_business_process_fields(self, dwd_record: Dict[str, Any], parsed_data: Dict[str, Any]):
         """映射业务流程分析字段"""
         uri = parsed_data.get('request', '').split(' ', 2)[1] if parsed_data.get('request') else ''
-        
+
+        # 解析URI为结构化数据
+        parsed_uri = self._parse_uri_structure(uri)
+
         # 业务流程字段
         dwd_record['business_operation_type'] = self._classify_business_operation(uri)
         dwd_record['business_value_score'] = self._calculate_business_value(uri, parsed_data)
         dwd_record['user_journey_stage'] = self._identify_journey_stage(uri)
         dwd_record['process_step_type'] = self._classify_process_step(uri)
         dwd_record['conversion_funnel_stage'] = self._identify_funnel_stage(uri)
-        dwd_record['business_priority'] = self._assess_business_priority(uri)
+        dwd_record['business_priority'] = self._assess_business_priority(parsed_uri, parsed_data)
         
     # ================================
     # v3.0 辅助推断方法
@@ -2012,15 +2969,4 @@ class FieldMapper:
             return 'retention'
         return 'interest'
         
-    def _assess_business_priority(self, uri: str) -> str:
-        """评估业务优先级"""
-        if not uri:
-            return 'low'
-        uri_lower = uri.lower()
-        if any(critical in uri_lower for critical in ['/payment', '/order', '/checkout']):
-            return 'critical'
-        elif any(high in uri_lower for high in ['/login', '/register', '/api/']):
-            return 'high'
-        elif any(medium in uri_lower for medium in ['/product', '/search']):
-            return 'medium'
         return 'low'

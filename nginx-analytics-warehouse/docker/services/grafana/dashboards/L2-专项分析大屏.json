@@ -1,0 +1,876 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "异常事件",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "L2专项分析大屏 - 深度问题分析和根因定位，支持异常检测和智能诊断",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "← 返回业务域大屏",
+      "tooltip": "返回L1业务域监控",
+      "type": "link",
+      "url": "/d/l1-business-domain-dashboard"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "← 返回总览大屏",
+      "tooltip": "返回L0总览监控",
+      "type": "link",
+      "url": "/d/l0-overview-dashboard"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "智能异常检测 - 基于实际数据的异常识别",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "frameIndex": 0,
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "rawSql": "SELECT \n  anomaly_type,\n  anomaly_level,\n  anomaly_details,\n  anomaly_count,\n  detect_time\nFROM (\n  SELECT \n    'Gov_App_Anomaly' as anomaly_type,\n    CASE \n      WHEN countIf(request_uri LIKE '%gov%' AND response_status_code != '200') > 100 THEN 'Critical'\n      WHEN countIf(request_uri LIKE '%gov%' AND response_status_code != '200') > 50 THEN 'High'\n      WHEN countIf(request_uri LIKE '%gov%' AND response_status_code != '200') > 10 THEN 'Medium'\n      ELSE 'Normal'\n    END as anomaly_level,\n    concat('Gov app errors: ', toString(countIf(request_uri LIKE '%gov%' AND response_status_code != '200'))) as anomaly_details,\n    countIf(request_uri LIKE '%gov%' AND response_status_code != '200') as anomaly_count,\n    now() as detect_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n  \n  UNION ALL\n  \n  SELECT \n    'Slow_Request_Anomaly' as anomaly_type,\n    CASE \n      WHEN countIf(total_request_duration > 5000) > 1000 THEN 'Critical'\n      WHEN countIf(total_request_duration > 3000) > 500 THEN 'High'\n      WHEN countIf(total_request_duration > 2000) > 200 THEN 'Medium'\n      ELSE 'Normal'\n    END as anomaly_level,\n    concat('Slow requests: ', toString(countIf(total_request_duration > 3000))) as anomaly_details,\n    countIf(total_request_duration > 3000) as anomaly_count,\n    now() as detect_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n  \n  UNION ALL\n  \n  SELECT \n    'Error_Rate_Anomaly' as anomaly_type,\n    CASE \n      WHEN countIf(response_status_code != '200')*100.0/nullIf(count(), 0) > 10 THEN 'Critical'\n      WHEN countIf(response_status_code != '200')*100.0/nullIf(count(), 0) > 5 THEN 'High'\n      WHEN countIf(response_status_code != '200')*100.0/nullIf(count(), 0) > 2 THEN 'Medium'\n      ELSE 'Normal'\n    END as anomaly_level,\n    concat('Error rate: ', toString(round(countIf(response_status_code != '200')*100.0/nullIf(count(), 0), 2)), '%') as anomaly_details,\n    countIf(response_status_code != '200') as anomaly_count,\n    now() as detect_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n) \nORDER BY \n  CASE anomaly_level \n    WHEN 'Critical' THEN 4 \n    WHEN 'High' THEN 3 \n    WHEN 'Medium' THEN 2 \n    ELSE 1 \n  END DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "🚨 智能异常检测",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "政府应用业务指标总览",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND request_uri LIKE '%gov%'",
+          "refId": "A"
+        }
+      ],
+      "title": "🏛️ 政府应用业务指标",
+      "transformations": [
+        {
+          "id": "seriesToColumns",
+          "options": {
+            "byField": "metric"
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "移动端设备访问统计",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5000
+              },
+              {
+                "color": "red",
+                "value": 10000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND (platform IN ('Android', 'iOS') OR device_type = 'mobile')",
+          "refId": "A"
+        }
+      ],
+      "title": "📱 移动端设备访问",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "机器人访问识别统计",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 3000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND is_bot = true",
+          "refId": "A"
+        }
+      ],
+      "title": "🤖 机器人访问统计",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "慢请求识别统计",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 8
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND total_request_duration > 3000",
+          "refId": "A"
+        }
+      ],
+      "title": "🐌 慢请求统计",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "平均响应时间统计",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 3000
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "rawSql": "SELECT round(avg(total_request_duration), 2) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)",
+          "refId": "A"
+        }
+      ],
+      "title": "📊 平均响应时间",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "政府应用深度分析",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "success_rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "rawSql": "SELECT \n  toStartOfInterval(log_time, INTERVAL 5 MINUTE) as time,\n  countIf(request_uri LIKE '%gov%') as gov_visits,\n  countIf(request_uri LIKE '%gov%' AND response_status_code = '200') as gov_success,\n  if(countIf(request_uri LIKE '%gov%') = 0, 0, countIf(request_uri LIKE '%gov%' AND response_status_code = '200')*100.0/countIf(request_uri LIKE '%gov%')) as success_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY time \nHAVING countIf(request_uri LIKE '%gov%') > 0\nORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "🏛️ 政府应用深度分析",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "机器人和爬虫检测分析",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "rawSql": "SELECT \n  CASE \n    WHEN user_agent_string LIKE '%Googlebot%' OR user_agent_string LIKE '%googlebot%' THEN 'GoogleBot'\n    WHEN user_agent_string LIKE '%bingbot%' OR user_agent_string LIKE '%Bingbot%' THEN 'BingBot'\n    WHEN user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%Bot%' OR user_agent_string LIKE '%crawler%' THEN 'Other_Bot'\n    ELSE 'Normal_User'\n  END as visitor_type,\n  count() as request_count,\n  countIf(response_status_code = '200')*100.0/nullIf(count(), 0) as quality_score\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY visitor_type \nORDER BY request_count DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "🤖 机器人检测分析",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "设备平台详细分析",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT \n  platform,\n  count() as requests,\n  round(avg(total_request_duration),2) as avg_response_time,\n  countIf(is_bot = true) as bot_count,\n  round(countIf(response_status_code != '200') * 100.0 / count(), 2) as error_rate_pct\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND platform != '' \nGROUP BY platform \nORDER BY count() DESC \nLIMIT 10"
+        }
+      ],
+      "title": "🔍 设备平台详细分析",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "IP安全风险分析",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 8,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT \n  client_ip,\n  count() as requests,\n  countIf(response_status_code != '200') as errors,\n  countIf(is_bot = true) as bot_requests\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY client_ip \nHAVING count() > 100 \nORDER BY count() DESC \nLIMIT 15"
+        }
+      ],
+      "title": "🔒 IP安全风险分析",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "description": "API性能关联分析",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 9,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "refId": "A",
+          "rawSql": "SELECT \n  CASE \n    WHEN length(request_uri) < 50 THEN 'Simple-API'\n    WHEN length(request_uri) < 100 THEN 'Medium-API'\n    ELSE 'Complex-API'\n  END as api_complexity,\n  count() as requests,\n  round(avg(total_request_duration),2) as avg_response_time,\n  round(quantile(0.95)(total_request_duration),2) as p95_response_time,\n  countIf(total_request_duration > 3000) as slow_requests\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY api_complexity \nORDER BY count() DESC"
+        }
+      ],
+      "title": "🎯 API性能关联分析",
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": [
+    "nginx",
+    "analytics"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "grafana-clickhouse-datasource",
+          "value": "fexr755u22ku8b"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "数据源",
+        "multi": false,
+        "name": "DS_CLICKHOUSE",
+        "options": [],
+        "query": "grafana-clickhouse-datasource",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT os_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE os_type != 'unknown'",
+        "includeAll": true,
+        "label": "操作系统",
+        "multi": true,
+        "name": "os_type",
+        "options": [],
+        "query": "SELECT DISTINCT os_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE os_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT response_status_code FROM nginx_analytics.dwd_nginx_enriched_v3",
+        "includeAll": true,
+        "label": "状态码",
+        "multi": true,
+        "name": "status_code",
+        "options": [],
+        "query": "SELECT DISTINCT response_status_code FROM nginx_analytics.dwd_nginx_enriched_v3",
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "L2-专项分析大屏",
+  "uid": "l2-specialized-analysis",
+  "version": 1,
+  "weekStart": ""
+}
