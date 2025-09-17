@@ -1123,7 +1123,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Nginx接口错误分析",
+  "title": "接口错误分析",
   "uid": "nginx-interface-error-analysis",
   "version": 1,
   "weekStart": ""

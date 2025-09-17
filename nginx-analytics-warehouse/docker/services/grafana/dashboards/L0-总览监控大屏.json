@@ -43,7 +43,7 @@
       "title": "❌ 错误深度分析",
       "tooltip": "跳转到错误分析专项",
       "type": "link",
-      "url": "/d/nginx-error-analysis"
+      "url": "/d/nginx-interface-error-analysis"
     },
     {
       "asDropdown": false,
@@ -350,7 +350,18 @@
         }
       ],
       "title": "❌ 错误率",
-      "type": "stat"
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "查看错误详情",
+              "url": "/d/nginx-interface-error-analysis?from=${__from}&to=${__to}&timezone=Asia%2FShanghai",
+              "targetBlank": true
+            }
+          ]
+        }
+      }
     },
     {
       "datasource": {
@@ -929,7 +940,25 @@
         }
       ],
       "title": "🏢 业务域访问TOP10",
-      "type": "barchart"
+      "type": "barchart",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            }
+          },
+          "links": [
+            {
+              "title": "查看业务域详情",
+              "url": "/d/l1-business-domain-dashboard?var-business_domain=${__field.name}&from=${__from}&to=${__to}&timezone=Asia%2FShanghai",
+              "targetBlank": true
+            }
+          ]
+        }
+      }
     },
     {
       "datasource": {
@@ -1068,12 +1097,96 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT \n  '系统性能' as \"检查项目\",\n  CASE \n    WHEN avg(total_request_duration) > 3000 THEN '严重'\n    WHEN avg(total_request_duration) > 1000 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('平均响应时间: ', toString(round(avg(total_request_duration))), 'ms') as \"详细信息\",\n  count(*) as \"请求总数\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\nUNION ALL\nSELECT \n  '错误率监控' as \"检查项目\",\n  CASE \n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 10 THEN '严重'\n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 2 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('错误率: ', toString(round(countIf(response_status_code != '200')*100.0/count(*), 2)), '%') as \"详细信息\",\n  countIf(response_status_code != '200') as \"请求总数\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\nUNION ALL\nSELECT \n  '流量总览' as \"检查项目\",\n  '正常' as \"告警级别\",\n  concat('总请求数: ', toString(count(*))) as \"详细信息\",\n  count(*) as \"请求总数\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)",
+          "rawSql": "SELECT \n  '系统性能' as \"检查项目\",\n  CASE \n    WHEN avg(total_request_duration) > 3000 THEN '严重'\n    WHEN avg(total_request_duration) > 1000 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('平均响应时间: ', toString(round(avg(total_request_duration))), 'ms') as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_api_performance_analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\nUNION ALL\nSELECT \n  '错误率监控' as \"检查项目\",\n  CASE \n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 10 THEN '严重'\n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 2 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('错误率: ', toString(round(countIf(response_status_code != '200')*100.0/count(*), 2)), '%') as \"详细信息\",\n  countIf(response_status_code != '200') as \"请求总数\",\n  'nginx-interface-error-analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\nUNION ALL\nSELECT \n  '流量总览' as \"检查项目\",\n  '正常' as \"告警级别\",\n  concat('总请求数: ', toString(count(*))) as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_comprehensive_monitoring_fixed' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)",
           "refId": "A"
         }
       ],
       "title": "⚠️ 系统告警汇总",
-      "type": "table"
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "displayMode": "auto",
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "检查项目"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "查看详情",
+                    "url": "/d/${__data.fields[\"跳转ID\"]}?from=${__from}&to=${__to}&timezone=Asia%2FShanghai",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "跳转ID"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "告警级别"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "严重": {
+                        "color": "red",
+                        "index": 0
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "警告": {
+                        "color": "yellow",
+                        "index": 1
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "正常": {
+                        "color": "green",
+                        "index": 2
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     }
   ],
   "refresh": "30s",

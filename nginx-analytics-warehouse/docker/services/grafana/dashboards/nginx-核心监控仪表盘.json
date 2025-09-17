@@ -621,7 +621,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Nginx核心监控仪表盘",
+  "title": "核心监控仪表盘",
   "uid": "nginx-core-monitoring",
   "version": 1,
   "weekStart": ""

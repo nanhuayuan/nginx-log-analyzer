@@ -1532,7 +1532,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Nginx - 状态码统计分析",
+  "title": "状态码统计分析",
   "uid": "nginx-status-code-analysis",
   "version": 1,
   "weekStart": ""

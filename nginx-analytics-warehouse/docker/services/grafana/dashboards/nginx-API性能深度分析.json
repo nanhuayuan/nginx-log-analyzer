@@ -873,7 +873,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Nginx API性能深度分析",
+  "title": "API性能深度分析",
   "uid": "nginx_api_performance_analysis",
   "version": 1
 }

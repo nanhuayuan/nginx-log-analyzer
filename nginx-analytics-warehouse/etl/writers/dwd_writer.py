@@ -361,6 +361,58 @@ class DWDWriter:
             finally:
                 self.client = None
 
+    def write_batch_optimized(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """优化的批量写入方法 - 更高性能"""
+        if not records:
+            return self._create_success_result(0, "没有记录需要写入")
+
+        # 使用写入锁
+        with self._write_lock:
+            if not self.client:
+                if not self.connect():
+                    return self._create_error_result("数据库连接失败")
+
+            try:
+                # 快速数据预处理 - 减少字段处理开销
+                list_data = []
+                for record in records:
+                    row_list = []
+                    for field_name in self.dwd_fields:
+                        value = record.get(field_name)
+                        # 快速处理关键字段
+                        if field_name == 'log_time' and isinstance(value, datetime):
+                            processed_value = value.replace(tzinfo=None) if value.tzinfo else value
+                        elif field_name in ['client_port', 'server_port', 'response_body_size'] and value is not None:
+                            try:
+                                processed_value = int(value) if isinstance(value, (int, float)) else int(float(value))
+                            except (ValueError, TypeError):
+                                processed_value = 0
+                        elif field_name in ['is_success', 'is_slow', 'is_error']:
+                            processed_value = bool(value) if value not in [None, '', '0', 'false', 'False'] else False
+                        else:
+                            processed_value = value if value is not None else self._get_default_value(field_name)
+
+                        row_list.append(processed_value)
+                    list_data.append(row_list)
+
+                # 异步批量插入
+                table_name = f"{self.config['database']}.dwd_nginx_enriched_v3"
+                result = self.client.insert(
+                    table=table_name,
+                    data=list_data,
+                    settings={'async_insert': 1, 'wait_for_async_insert': 0}  # 异步插入设置
+                )
+
+                success_count = len(records)
+                self.stats['total_records'] += success_count
+                self.stats['success_records'] += success_count
+
+                return self._create_success_result(success_count, f"优化写入成功: {success_count} 条记录")
+
+            except Exception as e:
+                self.logger.error(f"优化写入失败，回退到标准方法: {e}")
+                return self.write_batch(records)  # 回退到标准方法
+
     def write_batch(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         """批量写入数据到DWD表"""
         # 使用写入锁防止并发写入同一连接

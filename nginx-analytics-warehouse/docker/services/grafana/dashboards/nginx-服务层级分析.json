@@ -1285,7 +1285,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Nginx服务层级分析",
+  "title": "服务层级分析",
   "uid": "nginx-service-level-analysis",
   "version": 1,
   "weekStart": ""

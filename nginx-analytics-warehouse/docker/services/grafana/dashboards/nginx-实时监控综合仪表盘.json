@@ -686,7 +686,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Nginx实时监控综合仪表盘",
+  "title": "实时监控综合仪表盘",
   "uid": "nginx_comprehensive_monitoring_fixed",
   "version": 1
 }

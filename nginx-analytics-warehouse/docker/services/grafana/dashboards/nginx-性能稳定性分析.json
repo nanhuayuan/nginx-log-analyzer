@@ -506,7 +506,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Nginx性能稳定性分析",
+  "title": "性能稳定性分析",
   "uid": "nginx_performance_stability",
   "version": 1
 }

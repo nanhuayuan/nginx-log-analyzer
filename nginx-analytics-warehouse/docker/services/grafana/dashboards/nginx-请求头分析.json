@@ -698,7 +698,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Nginx请求头分析",
+  "title": "请求头分析",
   "uid": "nginx_header_analysis_fixed",
   "version": 1
 }

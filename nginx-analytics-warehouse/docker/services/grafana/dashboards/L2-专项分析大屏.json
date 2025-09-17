@@ -99,7 +99,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT \n  anomaly_type,\n  anomaly_level,\n  anomaly_details,\n  anomaly_count,\n  detect_time\nFROM (\n  SELECT \n    'Gov_App_Anomaly' as anomaly_type,\n    CASE \n      WHEN countIf(request_uri LIKE '%gov%' AND response_status_code != '200') > 100 THEN 'Critical'\n      WHEN countIf(request_uri LIKE '%gov%' AND response_status_code != '200') > 50 THEN 'High'\n      WHEN countIf(request_uri LIKE '%gov%' AND response_status_code != '200') > 10 THEN 'Medium'\n      ELSE 'Normal'\n    END as anomaly_level,\n    concat('Gov app errors: ', toString(countIf(request_uri LIKE '%gov%' AND response_status_code != '200'))) as anomaly_details,\n    countIf(request_uri LIKE '%gov%' AND response_status_code != '200') as anomaly_count,\n    now() as detect_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n  \n  UNION ALL\n  \n  SELECT \n    'Slow_Request_Anomaly' as anomaly_type,\n    CASE \n      WHEN countIf(total_request_duration > 5000) > 1000 THEN 'Critical'\n      WHEN countIf(total_request_duration > 3000) > 500 THEN 'High'\n      WHEN countIf(total_request_duration > 2000) > 200 THEN 'Medium'\n      ELSE 'Normal'\n    END as anomaly_level,\n    concat('Slow requests: ', toString(countIf(total_request_duration > 3000))) as anomaly_details,\n    countIf(total_request_duration > 3000) as anomaly_count,\n    now() as detect_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n  \n  UNION ALL\n  \n  SELECT \n    'Error_Rate_Anomaly' as anomaly_type,\n    CASE \n      WHEN countIf(response_status_code != '200')*100.0/nullIf(count(), 0) > 10 THEN 'Critical'\n      WHEN countIf(response_status_code != '200')*100.0/nullIf(count(), 0) > 5 THEN 'High'\n      WHEN countIf(response_status_code != '200')*100.0/nullIf(count(), 0) > 2 THEN 'Medium'\n      ELSE 'Normal'\n    END as anomaly_level,\n    concat('Error rate: ', toString(round(countIf(response_status_code != '200')*100.0/nullIf(count(), 0), 2)), '%') as anomaly_details,\n    countIf(response_status_code != '200') as anomaly_count,\n    now() as detect_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n) \nORDER BY \n  CASE anomaly_level \n    WHEN 'Critical' THEN 4 \n    WHEN 'High' THEN 3 \n    WHEN 'Medium' THEN 2 \n    ELSE 1 \n  END DESC",
+          "rawSql": "SELECT \n  anomaly_type,\n  anomaly_level,\n  anomaly_details,\n  anomaly_count,\n  detect_time\nFROM (\n  SELECT \n    'Gov_App_Anomaly' as anomaly_type,\n    CASE \n      WHEN countIf(request_uri LIKE '%gov%' AND response_status_code != '200') > 100 THEN 'Critical'\n      WHEN countIf(request_uri LIKE '%gov%' AND response_status_code != '200') > 50 THEN 'High'\n      WHEN countIf(request_uri LIKE '%gov%' AND response_status_code != '200') > 10 THEN 'Medium'\n      ELSE 'Normal'\n    END as anomaly_level,\n    concat('Gov app errors: ', toString(countIf(request_uri LIKE '%gov%' AND response_status_code != '200'))) as anomaly_details,\n    countIf(request_uri LIKE '%gov%' AND response_status_code != '200') as anomaly_count,\n    now() as detect_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code)\n  \n  UNION ALL\n  \n  SELECT \n    'Slow_Request_Anomaly' as anomaly_type,\n    CASE \n      WHEN countIf(total_request_duration > 5000) > 1000 THEN 'Critical'\n      WHEN countIf(total_request_duration > 3000) > 500 THEN 'High'\n      WHEN countIf(total_request_duration > 2000) > 200 THEN 'Medium'\n      ELSE 'Normal'\n    END as anomaly_level,\n    concat('Slow requests: ', toString(countIf(total_request_duration > 3000))) as anomaly_details,\n    countIf(total_request_duration > 3000) as anomaly_count,\n    now() as detect_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code)\n  \n  UNION ALL\n  \n  SELECT \n    'Error_Rate_Anomaly' as anomaly_type,\n    CASE \n      WHEN countIf(response_status_code != '200')*100.0/nullIf(count(), 0) > 10 THEN 'Critical'\n      WHEN countIf(response_status_code != '200')*100.0/nullIf(count(), 0) > 5 THEN 'High'\n      WHEN countIf(response_status_code != '200')*100.0/nullIf(count(), 0) > 2 THEN 'Medium'\n      ELSE 'Normal'\n    END as anomaly_level,\n    concat('Error rate: ', toString(round(countIf(response_status_code != '200')*100.0/nullIf(count(), 0), 2)), '%') as anomaly_details,\n    countIf(response_status_code != '200') as anomaly_count,\n    now() as detect_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code)\n) \nORDER BY \n  CASE anomaly_level \n    WHEN 'Critical' THEN 4 \n    WHEN 'High' THEN 3 \n    WHEN 'Medium' THEN 2 \n    ELSE 1 \n  END DESC",
           "refId": "A"
         }
       ],
@@ -165,7 +165,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND request_uri LIKE '%gov%'",
+          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) \n  AND request_uri LIKE '%gov%'",
           "refId": "A"
         }
       ],
@@ -243,7 +243,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND (platform IN ('Android', 'iOS') OR device_type = 'mobile')",
+          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) \n  AND (platform IN ('Android', 'iOS') OR device_type = 'mobile')",
           "refId": "A"
         }
       ],
@@ -313,7 +313,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND is_bot = true",
+          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) \n  AND is_bot = true",
           "refId": "A"
         }
       ],
@@ -383,7 +383,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND total_request_duration > 3000",
+          "rawSql": "SELECT count(*) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) \n  AND total_request_duration > 3000",
           "refId": "A"
         }
       ],
@@ -453,7 +453,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT round(avg(total_request_duration), 2) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)",
+          "rawSql": "SELECT round(avg(total_request_duration), 2) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code)",
           "refId": "A"
         }
       ],
@@ -554,7 +554,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT \n  toStartOfInterval(log_time, INTERVAL 5 MINUTE) as time,\n  countIf(request_uri LIKE '%gov%') as gov_visits,\n  countIf(request_uri LIKE '%gov%' AND response_status_code = '200') as gov_success,\n  if(countIf(request_uri LIKE '%gov%') = 0, 0, countIf(request_uri LIKE '%gov%' AND response_status_code = '200')*100.0/countIf(request_uri LIKE '%gov%')) as success_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY time \nHAVING countIf(request_uri LIKE '%gov%') > 0\nORDER BY time",
+          "rawSql": "SELECT \n  toStartOfInterval(log_time, INTERVAL 5 MINUTE) as time,\n  countIf(request_uri LIKE '%gov%') as gov_visits,\n  countIf(request_uri LIKE '%gov%' AND response_status_code = '200') as gov_success,\n  if(countIf(request_uri LIKE '%gov%') = 0, 0, countIf(request_uri LIKE '%gov%' AND response_status_code = '200')*100.0/countIf(request_uri LIKE '%gov%')) as success_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) \nGROUP BY time \nHAVING countIf(request_uri LIKE '%gov%') > 0\nORDER BY time",
           "refId": "A"
         }
       ],
@@ -615,7 +615,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT \n  CASE \n    WHEN user_agent_string LIKE '%Googlebot%' OR user_agent_string LIKE '%googlebot%' THEN 'GoogleBot'\n    WHEN user_agent_string LIKE '%bingbot%' OR user_agent_string LIKE '%Bingbot%' THEN 'BingBot'\n    WHEN user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%Bot%' OR user_agent_string LIKE '%crawler%' THEN 'Other_Bot'\n    ELSE 'Normal_User'\n  END as visitor_type,\n  count() as request_count,\n  countIf(response_status_code = '200')*100.0/nullIf(count(), 0) as quality_score\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY visitor_type \nORDER BY request_count DESC",
+          "rawSql": "SELECT \n  CASE \n    WHEN user_agent_string LIKE '%Googlebot%' OR user_agent_string LIKE '%googlebot%' THEN 'GoogleBot'\n    WHEN user_agent_string LIKE '%bingbot%' OR user_agent_string LIKE '%Bingbot%' THEN 'BingBot'\n    WHEN user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%Bot%' OR user_agent_string LIKE '%crawler%' THEN 'Other_Bot'\n    ELSE 'Normal_User'\n  END as visitor_type,\n  count() as request_count,\n  countIf(response_status_code = '200')*100.0/nullIf(count(), 0) as quality_score\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) \nGROUP BY visitor_type \nORDER BY request_count DESC",
           "refId": "A"
         }
       ],
@@ -673,7 +673,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT \n  platform,\n  count() as requests,\n  round(avg(total_request_duration),2) as avg_response_time,\n  countIf(is_bot = true) as bot_count,\n  round(countIf(response_status_code != '200') * 100.0 / count(), 2) as error_rate_pct\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND platform != '' \nGROUP BY platform \nORDER BY count() DESC \nLIMIT 10"
+          "rawSql": "SELECT \n  platform,\n  count() as requests,\n  round(avg(total_request_duration),2) as avg_response_time,\n  countIf(is_bot = true) as bot_count,\n  round(countIf(response_status_code != '200') * 100.0 / count(), 2) as error_rate_pct\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) \n  AND platform != '' \nGROUP BY platform \nORDER BY count() DESC \nLIMIT 10"
         }
       ],
       "title": "🔍 设备平台详细分析",
@@ -730,7 +730,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT \n  client_ip,\n  count() as requests,\n  countIf(response_status_code != '200') as errors,\n  countIf(is_bot = true) as bot_requests\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY client_ip \nHAVING count() > 100 \nORDER BY count() DESC \nLIMIT 15"
+          "rawSql": "SELECT \n  client_ip,\n  count() as requests,\n  countIf(response_status_code != '200') as errors,\n  countIf(is_bot = true) as bot_requests\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) \nGROUP BY client_ip \nHAVING count() > 100 \nORDER BY count() DESC \nLIMIT 15"
         }
       ],
       "title": "🔒 IP安全风险分析",
@@ -787,7 +787,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT \n  CASE \n    WHEN length(request_uri) < 50 THEN 'Simple-API'\n    WHEN length(request_uri) < 100 THEN 'Medium-API'\n    ELSE 'Complex-API'\n  END as api_complexity,\n  count() as requests,\n  round(avg(total_request_duration),2) as avg_response_time,\n  round(quantile(0.95)(total_request_duration),2) as p95_response_time,\n  countIf(total_request_duration > 3000) as slow_requests\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY api_complexity \nORDER BY count() DESC"
+          "rawSql": "SELECT \n  CASE \n    WHEN length(request_uri) < 50 THEN 'Simple-API'\n    WHEN length(request_uri) < 100 THEN 'Medium-API'\n    ELSE 'Complex-API'\n  END as api_complexity,\n  count() as requests,\n  round(avg(total_request_duration),2) as avg_response_time,\n  round(quantile(0.95)(total_request_duration),2) as p95_response_time,\n  countIf(total_request_duration > 3000) as slow_requests\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) \nGROUP BY api_complexity \nORDER BY count() DESC"
         }
       ],
       "title": "🎯 API性能关联分析",
@@ -820,6 +820,111 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "includeAll": true,
+        "label": "业务域",
+        "multi": true,
+        "name": "business_domain",
+        "options": [],
+        "query": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_criticality FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_criticality IS NOT NULL AND business_criticality != 'unknown'",
+        "includeAll": true,
+        "label": "业务优先级",
+        "multi": true,
+        "name": "business_criticality",
+        "options": [],
+        "query": "SELECT DISTINCT business_criticality FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_criticality IS NOT NULL AND business_criticality != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "includeAll": true,
+        "label": "平台类型",
+        "multi": true,
+        "name": "platform_type",
+        "options": [],
+        "query": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT device_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE device_type IS NOT NULL AND device_type != 'unknown'",
+        "includeAll": true,
+        "label": "设备类型",
+        "multi": true,
+        "name": "device_type",
+        "options": [],
+        "query": "SELECT DISTINCT device_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE device_type IS NOT NULL AND device_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT api_name FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE api_name IS NOT NULL AND api_name != 'unknown' AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)",
+        "includeAll": true,
+        "label": "API名称",
+        "multi": true,
+        "name": "api_name",
+        "options": [],
+        "query": "SELECT DISTINCT api_name FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE api_name IS NOT NULL AND api_name != 'unknown' AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
       },
       {
         "current": {
