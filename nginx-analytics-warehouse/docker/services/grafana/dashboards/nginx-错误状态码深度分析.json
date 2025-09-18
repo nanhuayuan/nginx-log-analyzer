@@ -93,7 +93,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT round((countIf(response_status_code >= '200' AND response_status_code < '400') * 100.0 / count()), 1) as value FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) "
+          "rawSql": "SELECT round((countIf(response_status_code >= '200' AND response_status_code < '400') * 100.0 / count()), 1) as value FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) "
         }
       ],
       "title": "错误状态码概览",
@@ -160,7 +160,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT round((countIf(response_status_code >= '400' AND response_status_code < '500') * 100.0 / count()), 2) as value FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) "
+          "rawSql": "SELECT round((countIf(response_status_code >= '400' AND response_status_code < '500') * 100.0 / count()), 2) as value FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) "
         }
       ],
       "title": "4XX客户端错误",
@@ -227,7 +227,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT round((countIf(response_status_code >= '500') * 100.0 / count()), 2) as value FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) "
+          "rawSql": "SELECT round((countIf(response_status_code >= '500') * 100.0 / count()), 2) as value FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) "
         }
       ],
       "title": "5XX服务器错误",
@@ -294,7 +294,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT countIf(response_status_code >= '400') as value FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) "
+          "rawSql": "SELECT countIf(response_status_code >= '400') as value FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) "
         }
       ],
       "title": "状态码分布",
@@ -455,7 +455,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time, countIf(response_status_code >= '200' AND response_status_code < '300') as status_2xx, countIf(response_status_code >= '300' AND response_status_code < '400') as status_3xx, countIf(response_status_code >= '400' AND response_status_code < '500') as status_4xx, countIf(response_status_code >= '500') as status_5xx FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time ORDER BY time"
+          "rawSql": "SELECT toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time, countIf(response_status_code >= '200' AND response_status_code < '300') as status_2xx, countIf(response_status_code >= '300' AND response_status_code < '400') as status_3xx, countIf(response_status_code >= '400' AND response_status_code < '500') as status_4xx, countIf(response_status_code >= '500') as status_5xx FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) GROUP BY time ORDER BY time"
         }
       ],
       "title": "HTTP状态码时序分析",
@@ -542,7 +542,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time, countIf(response_status_code >= '200' AND response_status_code < '400') * 100.0 / count() as success_rate, countIf(response_status_code >= '400' AND response_status_code < '500') * 100.0 / count() as client_error_rate, countIf(response_status_code >= '500') * 100.0 / count() as server_error_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time ORDER BY time"
+          "rawSql": "SELECT toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time, countIf(response_status_code >= '200' AND response_status_code < '400') * 100.0 / count() as success_rate, countIf(response_status_code >= '400' AND response_status_code < '500') * 100.0 / count() as client_error_rate, countIf(response_status_code >= '500') * 100.0 / count() as server_error_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) GROUP BY time ORDER BY time"
         }
       ],
       "title": "错误率趋势",
@@ -702,7 +702,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT response_status_code as status_code, count() as requests, round(count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)), 2) as percentage, round(avg(total_request_duration * 1000), 2) as avg_duration_ms, CASE WHEN response_status_code >= '200' AND response_status_code < '300' THEN '正常' WHEN response_status_code >= '300' AND response_status_code < '400' THEN '重定向' WHEN response_status_code >= '400' AND response_status_code < '500' THEN '客户端错误' WHEN response_status_code >= '500' THEN '服务器错误' ELSE '其他' END as category FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY response_status_code ORDER BY count() DESC LIMIT 20"
+          "rawSql": "SELECT response_status_code as status_code, count() as requests, round(count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)), 2) as percentage, round(avg(total_request_duration * 1000), 2) as avg_duration_ms, CASE WHEN response_status_code >= '200' AND response_status_code < '300' THEN '正常' WHEN response_status_code >= '300' AND response_status_code < '400' THEN '重定向' WHEN response_status_code >= '400' AND response_status_code < '500' THEN '客户端错误' WHEN response_status_code >= '500' THEN '服务器错误' ELSE '其他' END as category FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) GROUP BY response_status_code ORDER BY count() DESC LIMIT 20"
         }
       ],
       "title": "状态码统计详情",
@@ -766,7 +766,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT multiIf(response_status_code >= '200' AND response_status_code < '300', '2XX', response_status_code >= '300' AND response_status_code < '400', '3XX', response_status_code >= '400' AND response_status_code < '500', '4XX', response_status_code >= '500', '5XX', '') as status_category, count() as requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY status_category ORDER BY requests DESC"
+          "rawSql": "SELECT multiIf(response_status_code >= '200' AND response_status_code < '300', '2XX', response_status_code >= '300' AND response_status_code < '400', '3XX', response_status_code >= '400' AND response_status_code < '500', '4XX', response_status_code >= '500', '5XX', '') as status_category, count() as requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) GROUP BY status_category ORDER BY requests DESC"
         }
       ],
       "title": "4XX错误详细分析",
@@ -908,7 +908,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT platform, count() as total_requests, countIf(response_status_code >= '400') as error_requests, round(countIf(response_status_code >= '400') * 100.0 / count(), 2) as error_rate_pct, countIf(response_status_code >= '400' AND response_status_code < '500') as errors_4xx, countIf(response_status_code >= '500') as errors_5xx FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY platform ORDER BY countIf(response_status_code >= '400') DESC"
+          "rawSql": "SELECT platform, count() as total_requests, countIf(response_status_code >= '400') as error_requests, round(countIf(response_status_code >= '400') * 100.0 / count(), 2) as error_rate_pct, countIf(response_status_code >= '400' AND response_status_code < '500') as errors_4xx, countIf(response_status_code >= '500') as errors_5xx FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) GROUP BY platform ORDER BY countIf(response_status_code >= '400') DESC"
         }
       ],
       "title": "5XX错误详细分析",
@@ -1056,7 +1056,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT request_uri_normalized as request_uri, response_status_code as status_code, count() as occurrences, round(avg(total_request_duration * 1000), 2) as avg_duration_ms, uniq(client_ip) as unique_ips, toString(groupArray(platform)) as platforms, toString(groupArray(client_ip)) as sample_ips, CASE WHEN response_status_code = '404' THEN 'Page Not Found' WHEN response_status_code = '403' THEN 'Access Denied' WHEN response_status_code = '400' THEN 'Bad Request' WHEN response_status_code = '502' THEN 'Bad Gateway' WHEN response_status_code = '500' THEN 'Internal Server Error' WHEN response_status_code = '499' THEN 'Client Closed Connection' ELSE 'Other Error' END as error_description FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND response_status_code >= '400' GROUP BY request_uri_normalized, response_status_code ORDER BY count() DESC LIMIT 25"
+          "rawSql": "SELECT request_uri_normalized as request_uri, response_status_code as status_code, count() as occurrences, round(avg(total_request_duration * 1000), 2) as avg_duration_ms, uniq(client_ip) as unique_ips, toString(groupArray(platform)) as platforms, toString(groupArray(client_ip)) as sample_ips, CASE WHEN response_status_code = '404' THEN 'Page Not Found' WHEN response_status_code = '403' THEN 'Access Denied' WHEN response_status_code = '400' THEN 'Bad Request' WHEN response_status_code = '502' THEN 'Bad Gateway' WHEN response_status_code = '500' THEN 'Internal Server Error' WHEN response_status_code = '499' THEN 'Client Closed Connection' ELSE 'Other Error' END as error_description FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) AND response_status_code >= '400' GROUP BY request_uri_normalized, response_status_code ORDER BY count() DESC LIMIT 25"
         }
       ],
       "title": "错误请求详情",
@@ -1195,7 +1195,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT client_ip, count() as total_requests, countIf(response_status_code >= '400') as error_requests, round(countIf(response_status_code >= '400') * 100.0 / count(), 2) as error_rate_pct, uniq(request_uri_normalized) as unique_urls, uniq(response_status_code) as unique_status_codes, toString(groupArray(response_status_code)) as status_codes, any(platform) as platform, any(api_category) as api_category FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY client_ip HAVING countIf(response_status_code >= '400') >= 20 OR (countIf(response_status_code >= '400') * 100.0 / count()) >= 15 ORDER BY countIf(response_status_code >= '400') DESC LIMIT 20"
+          "rawSql": "SELECT client_ip, count() as total_requests, countIf(response_status_code >= '400') as error_requests, round(countIf(response_status_code >= '400') * 100.0 / count(), 2) as error_rate_pct, uniq(request_uri_normalized) as unique_urls, uniq(response_status_code) as unique_status_codes, toString(groupArray(response_status_code)) as status_codes, any(platform) as platform, any(api_category) as api_category FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) GROUP BY client_ip HAVING countIf(response_status_code >= '400') >= 20 OR (countIf(response_status_code >= '400') * 100.0 / count()) >= 15 ORDER BY countIf(response_status_code >= '400') DESC LIMIT 20"
         }
       ],
       "title": "状态码统计表",
@@ -1307,7 +1307,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT api_category, count() as total_requests, countIf(response_status_code >= '400') as error_requests, round(countIf(response_status_code >= '400') * 100.0 / count(), 2) as error_rate_pct, countIf(response_status_code >= '400' AND response_status_code < '500') as errors_4xx, countIf(response_status_code >= '500') as errors_5xx, round(avg(total_request_duration * 1000), 2) as avg_duration_ms, uniq(request_uri_normalized) as unique_apis FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY api_category ORDER BY countIf(response_status_code >= '400') DESC"
+          "rawSql": "SELECT api_category, count() as total_requests, countIf(response_status_code >= '400') as error_requests, round(countIf(response_status_code >= '400') * 100.0 / count(), 2) as error_rate_pct, countIf(response_status_code >= '400' AND response_status_code < '500') as errors_4xx, countIf(response_status_code >= '500') as errors_5xx, round(avg(total_request_duration * 1000), 2) as avg_duration_ms, uniq(request_uri_normalized) as unique_apis FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) GROUP BY api_category ORDER BY countIf(response_status_code >= '400') DESC"
         }
       ],
       "title": "错误请求详情",
@@ -1394,7 +1394,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time, api_category, countIf(response_status_code >= '400') * 100.0 / count() as error_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND api_category IN ('static', 'gateway-api', 'service-api', 'h5-page', 'rest-api') GROUP BY time, api_category ORDER BY time, api_category"
+          "rawSql": "SELECT toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time, api_category, countIf(response_status_code >= '400') * 100.0 / count() as error_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain) AND api_category IN ('static', 'gateway-api', 'service-api', 'h5-page', 'rest-api') GROUP BY time, api_category ORDER BY time, api_category"
         }
       ],
       "title": "API类别错误率",
@@ -1429,6 +1429,89 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "includeAll": true,
+        "label": "业务系统",
+        "multi": true,
+        "name": "business_unit",
+        "options": [],
+        "query": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "includeAll": true,
+        "label": "环境",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT response_status_code FROM nginx_analytics.dwd_nginx_enriched_v3",
+        "includeAll": true,
+        "label": "状态码",
+        "multi": true,
+        "name": "status_code",
+        "options": [],
+        "query": "SELECT DISTINCT response_status_code FROM nginx_analytics.dwd_nginx_enriched_v3",
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "includeAll": true,
+        "label": "业务域",
+        "multi": true,
+        "name": "business_domain",
+        "options": [],
+        "query": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
       }
     ]
   },

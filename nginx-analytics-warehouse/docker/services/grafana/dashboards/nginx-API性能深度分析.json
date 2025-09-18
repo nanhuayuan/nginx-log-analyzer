@@ -7,7 +7,56 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🐌 慢请求分析",
+      "tooltip": "查看慢请求详细分析",
+      "type": "link",
+      "url": "/d/nginx-slow-requests-analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "📊 性能稳定性分析",
+      "tooltip": "查看性能稳定性分析",
+      "type": "link",
+      "url": "/d/nginx_performance_stability?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🔧 服务层级分析",
+      "tooltip": "查看服务层级分析",
+      "type": "link",
+      "url": "/d/nginx-service-level-analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🔙 返回L2专项分析",
+      "tooltip": "返回L2专项分析大屏",
+      "type": "link",
+      "url": "/d/l2-specialized-analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    }
+  ],
   "panels": [
     {
       "datasource": {
@@ -70,7 +119,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT countIf(response_status_code = '200') * 100.0 / count(*) as success_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)"
+          "rawSql": "SELECT countIf(response_status_code = '200') * 100.0 / count(*) as success_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code)"
         }
       ],
       "title": "✅ 成功率",
@@ -137,7 +186,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT countIf(total_request_duration > 3) * 100.0 / count(*) as slow_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)"
+          "rawSql": "SELECT countIf(total_request_duration > 3) * 100.0 / count(*) as slow_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code)"
         }
       ],
       "title": "🐌 慢请求比例",
@@ -204,7 +253,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT quantile(0.95)(total_request_duration * 1000) as p95_response_time FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)"
+          "rawSql": "SELECT quantile(0.95)(total_request_duration * 1000) as p95_response_time FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code)"
         }
       ],
       "title": "📊 P95响应时间",
@@ -271,7 +320,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT count(DISTINCT request_uri_normalized) as unique_apis FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)"
+          "rawSql": "SELECT count(DISTINCT request_uri_normalized) as unique_apis FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code)"
         }
       ],
       "title": "🚀 活跃API数",
@@ -410,7 +459,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT request_uri_normalized as `API接口`, api_category as `API类别`, count() as `总请求数`, countIf(total_request_duration > 3) as `慢请求数`, countIf(total_request_duration > 3) * 100.0 / count() as `慢请求比例(%)`, avg(total_request_duration * 1000) as `平均响应时间(ms)`, quantile(0.50)(total_request_duration * 1000) as `P50响应时间(ms)`, quantile(0.95)(total_request_duration * 1000) as `P95响应时间(ms)`, quantile(0.99)(total_request_duration * 1000) as `P99响应时间(ms)`, countIf(response_status_code >= '400') as `错误数`, countIf(response_status_code >= '400') * 100.0 / count() as `错误率(%)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY request_uri_normalized, api_category HAVING countIf(total_request_duration > 3) > 0 ORDER BY countIf(total_request_duration > 3) DESC LIMIT 20"
+          "rawSql": "SELECT request_uri_normalized as `API接口`, api_category as `API类别`, count() as `总请求数`, countIf(total_request_duration > 3) as `慢请求数`, countIf(total_request_duration > 3) * 100.0 / count() as `慢请求比例(%)`, avg(total_request_duration * 1000) as `平均响应时间(ms)`, quantile(0.50)(total_request_duration * 1000) as `P50响应时间(ms)`, quantile(0.95)(total_request_duration * 1000) as `P95响应时间(ms)`, quantile(0.99)(total_request_duration * 1000) as `P99响应时间(ms)`, countIf(response_status_code >= '400') as `错误数`, countIf(response_status_code >= '400') * 100.0 / count() as `错误率(%)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) GROUP BY request_uri_normalized, api_category HAVING countIf(total_request_duration > 3) > 0 ORDER BY countIf(total_request_duration > 3) DESC LIMIT 20"
         }
       ],
       "title": "🚀 TOP20慢API接口详细分析",
@@ -503,7 +552,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT platform as `平台`, api_category as `API类别`, count() as `请求数`, avg(total_request_duration * 1000) as `平均响应时间(ms)`, quantile(0.95)(total_request_duration * 1000) as `P95响应时间(ms)`, countIf(total_request_duration > 3) as `慢请求数`, countIf(total_request_duration > 3) * 100.0 / count() as `慢请求比例(%)`, countIf(response_status_code >= '400') * 100.0 / count() as `错误率(%)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY platform, api_category ORDER BY avg(total_request_duration * 1000) DESC LIMIT 15"
+          "rawSql": "SELECT platform as `平台`, api_category as `API类别`, count() as `请求数`, avg(total_request_duration * 1000) as `平均响应时间(ms)`, quantile(0.95)(total_request_duration * 1000) as `P95响应时间(ms)`, countIf(total_request_duration > 3) as `慢请求数`, countIf(total_request_duration > 3) * 100.0 / count() as `慢请求比例(%)`, countIf(response_status_code >= '400') * 100.0 / count() as `错误率(%)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) GROUP BY platform, api_category ORDER BY avg(total_request_duration * 1000) DESC LIMIT 15"
         }
       ],
       "title": "📱 平台×API类别性能矩阵",
@@ -555,7 +604,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT api_category as `API类别`, count() as `请求数`, countIf(total_request_duration <= 0.1) as `极快(<100ms)`, countIf(total_request_duration > 0.1 AND total_request_duration <= 0.5) as `快速(100-500ms)`, countIf(total_request_duration > 0.5 AND total_request_duration <= 1) as `正常(500ms-1s)`, countIf(total_request_duration > 1 AND total_request_duration <= 3) as `慢速(1-3s)`, countIf(total_request_duration > 3) as `极慢(>3s)`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY api_category ORDER BY avg(total_request_duration * 1000) DESC"
+          "rawSql": "SELECT api_category as `API类别`, count() as `请求数`, countIf(total_request_duration <= 0.1) as `极快(<100ms)`, countIf(total_request_duration > 0.1 AND total_request_duration <= 0.5) as `快速(100-500ms)`, countIf(total_request_duration > 0.5 AND total_request_duration <= 1) as `正常(500ms-1s)`, countIf(total_request_duration > 1 AND total_request_duration <= 3) as `慢速(1-3s)`, countIf(total_request_duration > 3) as `极慢(>3s)`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) GROUP BY api_category ORDER BY avg(total_request_duration * 1000) DESC"
         }
       ],
       "title": "⚡ API类别响应时间分布",
@@ -642,7 +691,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT $__timeInterval(log_time) as time, api_category, avg(total_request_duration * 1000) as response_time FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time, api_category ORDER BY time"
+          "rawSql": "SELECT $__timeInterval(log_time) as time, api_category, avg(total_request_duration * 1000) as response_time FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) GROUP BY time, api_category ORDER BY time"
         }
       ],
       "title": "📈 API类别响应时间趋势",
@@ -729,7 +778,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT $__timeInterval(log_time) as time, platform, countIf(total_request_duration > 3) as slow_requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time, platform ORDER BY time"
+          "rawSql": "SELECT $__timeInterval(log_time) as time, platform, countIf(total_request_duration > 3) as slow_requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) GROUP BY time, platform ORDER BY time"
         }
       ],
       "title": "🐌 平台慢请求数趋势",
@@ -828,7 +877,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT request_uri_normalized as `API接口`, api_category as `API类别`, any(platform) as `主要平台`, count() as `总请求数`, countIf(response_status_code >= '400') as `错误数`, countIf(response_status_code >= '400') * 100.0 / count() as `错误率(%)`, countIf(response_status_code = '404') as `404错误`, countIf(response_status_code = '500') as `500错误`, countIf(response_status_code = '502') as `502错误`, countIf(response_status_code = '503') as `503错误`, avg(total_request_duration * 1000) as `平均响应时间(ms)`, groupUniqArray(3)(response_status_code) as `错误状态码Top3` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND response_status_code >= '400' GROUP BY request_uri_normalized, api_category ORDER BY countIf(response_status_code >= '400') DESC LIMIT 20"
+          "rawSql": "SELECT request_uri_normalized as `API接口`, api_category as `API类别`, any(platform) as `主要平台`, count() as `总请求数`, countIf(response_status_code >= '400') as `错误数`, countIf(response_status_code >= '400') * 100.0 / count() as `错误率(%)`, countIf(response_status_code = '404') as `404错误`, countIf(response_status_code = '500') as `500错误`, countIf(response_status_code = '502') as `502错误`, countIf(response_status_code = '503') as `503错误`, avg(total_request_duration * 1000) as `平均响应时间(ms)`, groupUniqArray(3)(response_status_code) as `错误状态码Top3` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(business_criticality IN (${business_criticality:singlequote}), $business_criticality)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND $__conditionalAll(api_name IN (${api_name:singlequote}), $api_name)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(response_status_code IN (${status_code:singlequote}), $status_code) AND response_status_code >= '400' GROUP BY request_uri_normalized, api_category ORDER BY countIf(response_status_code >= '400') DESC LIMIT 20"
         }
       ],
       "title": "❌ TOP20错误API接口分析",
@@ -864,6 +913,193 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "includeAll": true,
+        "label": "业务系统",
+        "multi": true,
+        "name": "business_unit",
+        "options": [],
+        "query": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "includeAll": true,
+        "label": "环境",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "includeAll": true,
+        "label": "业务域",
+        "multi": true,
+        "name": "business_domain",
+        "options": [],
+        "query": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_criticality FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_criticality IS NOT NULL AND business_criticality != 'unknown'",
+        "includeAll": true,
+        "label": "业务优先级",
+        "multi": true,
+        "name": "business_criticality",
+        "options": [],
+        "query": "SELECT DISTINCT business_criticality FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_criticality IS NOT NULL AND business_criticality != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "includeAll": true,
+        "label": "平台类型",
+        "multi": true,
+        "name": "platform_type",
+        "options": [],
+        "query": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT device_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE device_type IS NOT NULL AND device_type != 'unknown'",
+        "includeAll": true,
+        "label": "设备类型",
+        "multi": true,
+        "name": "device_type",
+        "options": [],
+        "query": "SELECT DISTINCT device_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE device_type IS NOT NULL AND device_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT api_name FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE api_name IS NOT NULL AND api_name != 'unknown' AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)",
+        "includeAll": true,
+        "label": "API名称",
+        "multi": true,
+        "name": "api_name",
+        "options": [],
+        "query": "SELECT DISTINCT api_name FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE api_name IS NOT NULL AND api_name != 'unknown' AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT os_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE os_type != 'unknown'",
+        "includeAll": true,
+        "label": "操作系统",
+        "multi": true,
+        "name": "os_type",
+        "options": [],
+        "query": "SELECT DISTINCT os_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE os_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT response_status_code FROM nginx_analytics.dwd_nginx_enriched_v3",
+        "includeAll": true,
+        "label": "状态码",
+        "multi": true,
+        "name": "status_code",
+        "options": [],
+        "query": "SELECT DISTINCT response_status_code FROM nginx_analytics.dwd_nginx_enriched_v3",
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
       }
     ]
   },

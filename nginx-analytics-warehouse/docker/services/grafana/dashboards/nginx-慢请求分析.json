@@ -20,7 +20,56 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🚀 API性能深度分析",
+      "tooltip": "查看API性能详细分析",
+      "type": "link",
+      "url": "/d/nginx_api_performance_analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "📊 性能稳定性分析",
+      "tooltip": "查看性能稳定性分析",
+      "type": "link",
+      "url": "/d/nginx_performance_stability?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🔄 HTTP生命周期分析",
+      "tooltip": "查看HTTP请求生命周期",
+      "type": "link",
+      "url": "/d/nginx-http-lifecycle?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🔙 返回L2专项分析",
+      "tooltip": "返回L2专项分析大屏",
+      "type": "link",
+      "url": "/d/l2-specialized-analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    }
+  ],
   "panels": [
     {
       "collapsed": false,
@@ -96,7 +145,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    countIf(total_request_duration > $slow_threshold) as slow_count\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)"
+          "rawSql": "SELECT\n    countIf(total_request_duration > $slow_threshold) as slow_count\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)"
         }
       ],
       "title": "慢请求总数",
@@ -165,7 +214,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as value\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\nGROUP BY time\nORDER BY time"
         }
       ],
       "title": "慢请求率",
@@ -232,7 +281,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    avg(total_request_duration) as avg_response_time\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)"
+          "rawSql": "SELECT\n    avg(total_request_duration) as avg_response_time\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)"
         }
       ],
       "title": "平均响应时间",
@@ -296,7 +345,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    quantile(0.50)(total_request_duration) as p50,\n    quantile(0.90)(total_request_duration) as p90,\n                            quantile(0.95)(total_request_duration) as p95,\n    quantile(0.99)(total_request_duration) as p99\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    quantile(0.50)(total_request_duration) as p50,\n    quantile(0.90)(total_request_duration) as p90,\n                            quantile(0.95)(total_request_duration) as p95,\n    quantile(0.99)(total_request_duration) as p99\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\nGROUP BY time\nORDER BY time"
         }
       ],
       "title": "响应时间分布",
@@ -423,7 +472,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    countIf(total_request_duration > $slow_threshold) as slow_requests,\n    avg(total_request_duration) as avg_duration\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND total_request_duration > $slow_threshold\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    countIf(total_request_duration > $slow_threshold) as slow_requests,\n    avg(total_request_duration) as avg_duration\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND total_request_duration > $slow_threshold\nGROUP BY time\nORDER BY time"
         }
       ],
       "title": "TOP慢接口",
@@ -506,7 +555,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    count() as total_requests,\n    countIf(total_request_duration > $slow_threshold) as slow_requests,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    count() as total_requests,\n    countIf(total_request_duration > $slow_threshold) as slow_requests,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\nGROUP BY time\nORDER BY time"
         }
       ],
       "title": "慢请求时间分析",
@@ -657,7 +706,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    response_status_code,\n    count() as request_count,\n    countIf(total_request_duration > $slow_threshold) as slow_count,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND total_request_duration > $slow_threshold\nGROUP BY response_status_code\nORDER BY slow_count DESC"
+          "rawSql": "SELECT\n    response_status_code,\n    count() as request_count,\n    countIf(total_request_duration > $slow_threshold) as slow_count,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND total_request_duration > $slow_threshold\nGROUP BY response_status_code\nORDER BY slow_count DESC"
         }
       ],
       "title": "慢请求状态码",
@@ -735,7 +784,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    api_category,\n    countIf(total_request_duration > $slow_threshold) as slow_count\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND total_request_duration > $slow_threshold\n    AND api_category != ''\nGROUP BY api_category\nORDER BY slow_count DESC\nLIMIT 10"
+          "rawSql": "SELECT\n    api_category,\n    countIf(total_request_duration > $slow_threshold) as slow_count\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND total_request_duration > $slow_threshold\n    AND api_category != ''\nGROUP BY api_category\nORDER BY slow_count DESC\nLIMIT 10"
         }
       ],
       "title": "慢请求API分类分布",
@@ -822,7 +871,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    platform,\n    countIf(total_request_duration > $slow_threshold) as slow_count,\n    count() as total_requests,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate,\n    avg(total_request_duration) as avg_duration,\n    uniq(client_ip) as unique_ips\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND platform != ''\nGROUP BY platform\nHAVING slow_count > 0\nORDER BY slow_count DESC"
+          "rawSql": "SELECT\n    platform,\n    countIf(total_request_duration > $slow_threshold) as slow_count,\n    count() as total_requests,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate,\n    avg(total_request_duration) as avg_duration,\n    uniq(client_ip) as unique_ips\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND platform != ''\nGROUP BY platform\nHAVING slow_count > 0\nORDER BY slow_count DESC"
         }
       ],
       "title": "慢请求平台分析",
@@ -928,7 +977,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    client_ip,\n    countIf(total_request_duration > $slow_threshold) as slow_count,\n    count() as total_requests,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate,\n    avg(total_request_duration) as avg_duration,\n    uniq(request_uri_normalized) as unique_apis\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY client_ip\nHAVING slow_count > 5\nORDER BY slow_count DESC\nLIMIT 15"
+          "rawSql": "SELECT\n    client_ip,\n    countIf(total_request_duration > $slow_threshold) as slow_count,\n    count() as total_requests,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate,\n    avg(total_request_duration) as avg_duration,\n    uniq(request_uri_normalized) as unique_apis\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\nGROUP BY client_ip\nHAVING slow_count > 5\nORDER BY slow_count DESC\nLIMIT 15"
         }
       ],
       "title": "慢请求风险IP",
@@ -1054,7 +1103,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    request_uri_normalized as api_endpoint,\n    api_category,\n    countIf(total_request_duration > $slow_threshold) as slow_count,\n    avg(total_request_duration) as avg_duration,\n    quantile(0.95)(total_request_duration) as p95_duration,\n    count() as total_requests,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate,\n    CASE\n        WHEN countIf(total_request_duration > $slow_threshold) > 100 THEN '高风险'\n        WHEN countIf(total_request_duration > $slow_threshold) > 50 THEN '中风险'\n        ELSE '低风险'\n    END as risk_level\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY request_uri_normalized, api_category\nHAVING slow_count > 10\nORDER BY slow_count DESC, avg_duration DESC\nLIMIT 20"
+          "rawSql": "SELECT\n    request_uri_normalized as api_endpoint,\n    api_category,\n    countIf(total_request_duration > $slow_threshold) as slow_count,\n    avg(total_request_duration) as avg_duration,\n    quantile(0.95)(total_request_duration) as p95_duration,\n    count() as total_requests,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate,\n    CASE\n        WHEN countIf(total_request_duration > $slow_threshold) > 100 THEN '高风险'\n        WHEN countIf(total_request_duration > $slow_threshold) > 50 THEN '中风险'\n        ELSE '低风险'\n    END as risk_level\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\nGROUP BY request_uri_normalized, api_category\nHAVING slow_count > 10\nORDER BY slow_count DESC, avg_duration DESC\nLIMIT 20"
         }
       ],
       "title": "慢请求API详情",
@@ -1089,6 +1138,90 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "includeAll": true,
+        "label": "业务系统",
+        "multi": true,
+        "name": "business_unit",
+        "options": [],
+        "query": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "includeAll": true,
+        "label": "环境",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "includeAll": true,
+        "label": "业务域",
+        "multi": true,
+        "name": "business_domain",
+        "options": [],
+        "query": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "includeAll": true,
+        "label": "平台类型",
+        "multi": true,
+        "name": "platform_type",
+        "options": [],
+        "query": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
       },
       {
         "current": {

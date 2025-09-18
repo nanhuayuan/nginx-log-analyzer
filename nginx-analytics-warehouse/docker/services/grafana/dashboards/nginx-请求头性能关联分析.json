@@ -95,7 +95,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-'"
+          "rawSql": "SELECT (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type) AND user_agent_string != '' AND user_agent_string != '-'"
         }
       ],
       "title": "慢请求率（有请求头）",
@@ -161,7 +161,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT avg(total_request_duration) as avg_response_time FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-'"
+          "rawSql": "SELECT avg(total_request_duration) as avg_response_time FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type) AND user_agent_string != '' AND user_agent_string != '-'"
         }
       ],
       "title": "平均响应时间（有请求头）",
@@ -219,7 +219,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT countDistinct(user_agent_string) as unique_user_agents FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-'"
+          "rawSql": "SELECT countDistinct(user_agent_string) as unique_user_agents FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type) AND user_agent_string != '' AND user_agent_string != '-'"
         }
       ],
       "title": "User Agent类型统计",
@@ -270,7 +270,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    multiIf(\n        user_agent_string LIKE '%Chrome%' AND user_agent_string NOT LIKE '%Edge%', 'Chrome',\n        user_agent_string LIKE '%Firefox%', 'Firefox',\n        user_agent_string LIKE '%Safari%' AND user_agent_string NOT LIKE '%Chrome%', 'Safari',\n        user_agent_string LIKE '%Edge%', 'Edge',\n        user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%', 'Bot',\n        'Other'\n    ) as browser_type,\n    count() as request_count,\n    avg(total_request_duration) as avg_duration,\n    quantile(0.95)(total_request_duration) as p95_duration,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND user_agent_string != '' AND user_agent_string != '-'\n    AND total_request_duration > 0\nGROUP BY browser_type\nHAVING count() >= 10\nORDER BY slow_rate DESC"
+          "rawSql": "SELECT\n    multiIf(\n        user_agent_string LIKE '%Chrome%' AND user_agent_string NOT LIKE '%Edge%', 'Chrome',\n        user_agent_string LIKE '%Firefox%', 'Firefox',\n        user_agent_string LIKE '%Safari%' AND user_agent_string NOT LIKE '%Chrome%', 'Safari',\n        user_agent_string LIKE '%Edge%', 'Edge',\n        user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%', 'Bot',\n        'Other'\n    ) as browser_type,\n    count() as request_count,\n    avg(total_request_duration) as avg_duration,\n    quantile(0.95)(total_request_duration) as p95_duration,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND user_agent_string != '' AND user_agent_string != '-'\n    AND total_request_duration > 0\nGROUP BY browser_type\nHAVING count() >= 10\nORDER BY slow_rate DESC"
         }
       ],
       "title": "浏览器性能关联",
@@ -321,7 +321,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    multiIf(\n        user_agent_string LIKE '%Windows%', 'Windows',\n        user_agent_string LIKE '%Mac%' OR user_agent_string LIKE '%macOS%', 'macOS',\n        user_agent_string LIKE '%Linux%' AND user_agent_string NOT LIKE '%Android%', 'Linux',\n        user_agent_string LIKE '%Android%', 'Android',\n        user_agent_string LIKE '%iPhone%' OR user_agent_string LIKE '%iOS%', 'iOS',\n        'Other'\n    ) as os_type,\n    count() as request_count,\n    avg(total_request_duration) as avg_duration,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate,\n    quantile(0.95)(total_request_duration) as p95_duration\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND user_agent_string != '' AND user_agent_string != '-'\n    AND total_request_duration > 0\n    AND NOT (user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%')\nGROUP BY os_type\nHAVING count() >= 10\nORDER BY slow_rate DESC"
+          "rawSql": "SELECT\n    multiIf(\n        user_agent_string LIKE '%Windows%', 'Windows',\n        user_agent_string LIKE '%Mac%' OR user_agent_string LIKE '%macOS%', 'macOS',\n        user_agent_string LIKE '%Linux%' AND user_agent_string NOT LIKE '%Android%', 'Linux',\n        user_agent_string LIKE '%Android%', 'Android',\n        user_agent_string LIKE '%iPhone%' OR user_agent_string LIKE '%iOS%', 'iOS',\n        'Other'\n    ) as os_type,\n    count() as request_count,\n    avg(total_request_duration) as avg_duration,\n    (countIf(total_request_duration > $slow_threshold) * 100.0 / count()) as slow_rate,\n    quantile(0.95)(total_request_duration) as p95_duration\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND user_agent_string != '' AND user_agent_string != '-'\n    AND total_request_duration > 0\n    AND NOT (user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%')\nGROUP BY os_type\nHAVING count() >= 10\nORDER BY slow_rate DESC"
         }
       ],
       "title": "操作系统性能分析",
@@ -356,6 +356,110 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "includeAll": true,
+        "label": "业务系统",
+        "multi": true,
+        "name": "business_unit",
+        "options": [],
+        "query": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "includeAll": true,
+        "label": "环境",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "includeAll": true,
+        "label": "平台类型",
+        "multi": true,
+        "name": "platform_type",
+        "options": [],
+        "query": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT os_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE os_type != 'unknown'",
+        "includeAll": true,
+        "label": "操作系统",
+        "multi": true,
+        "name": "os_type",
+        "options": [],
+        "query": "SELECT DISTINCT os_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE os_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT device_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE device_type IS NOT NULL AND device_type != 'unknown'",
+        "includeAll": true,
+        "label": "设备类型",
+        "multi": true,
+        "name": "device_type",
+        "options": [],
+        "query": "SELECT DISTINCT device_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE device_type IS NOT NULL AND device_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
       },
       {
         "current": {

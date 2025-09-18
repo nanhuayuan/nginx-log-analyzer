@@ -116,7 +116,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    count() / $__interval_s as requests_per_second,\n    countIf(response_status_code IN ('200', '201', '202', '204')) / $__interval_s as success_requests,\n    countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) / $__interval_s as error_requests\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    count() / $__interval_s as requests_per_second,\n    countIf(response_status_code IN ('200', '201', '202', '204')) / $__interval_s as success_requests,\n    countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) / $__interval_s as error_requests\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\nGROUP BY time\nORDER BY time"
         }
       ],
       "title": "请求频率分析",
@@ -212,7 +212,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    toHour(log_time) as hour,\n    count() as requests\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time, hour\nORDER BY time, hour"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    toHour(log_time) as hour,\n    count() as requests\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\nGROUP BY time, hour\nORDER BY time, hour"
         }
       ],
       "title": "24小时请求分布",
@@ -295,7 +295,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    toDayOfWeek(log_time) as day_of_week,\n    count() as requests\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time, day_of_week\nORDER BY time, day_of_week"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    toDayOfWeek(log_time) as day_of_week,\n    count() as requests\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\nGROUP BY time, day_of_week\nORDER BY time, day_of_week"
         }
       ],
       "title": "星期分布统计",
@@ -330,6 +330,69 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "includeAll": true,
+        "label": "业务系统",
+        "multi": true,
+        "name": "business_unit",
+        "options": [],
+        "query": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "includeAll": true,
+        "label": "环境",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "includeAll": true,
+        "label": "业务域",
+        "multi": true,
+        "name": "business_domain",
+        "options": [],
+        "query": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
       }
     ]
   },

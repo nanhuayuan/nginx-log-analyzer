@@ -20,7 +20,56 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🔧 服务层级分析",
+      "tooltip": "查看服务层级分析",
+      "type": "link",
+      "url": "/d/nginx-service-level-analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🕓 时间维度分析",
+      "tooltip": "查看时间维度分析",
+      "type": "link",
+      "url": "/d/nginx-time-dimension-analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "📜 请求头分析",
+      "tooltip": "查看请求头详细分析",
+      "type": "link",
+      "url": "/d/nginx_header_analysis_fixed?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🔙 返回L2专项分析",
+      "tooltip": "返回L2专项分析大屏",
+      "type": "link",
+      "url": "/d/l2-specialized-analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    }
+  ],
   "panels": [
     {
       "collapsed": false,
@@ -96,7 +145,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    uniq(client_ip) as unique_ips\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    uniq(client_ip) as unique_ips\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\nGROUP BY time\nORDER BY time"
         }
       ],
       "title": "唯一IP数量",
@@ -163,7 +212,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    time,\n    count(if(request_count > 1000, client_ip, null)) as high_volume_ips\nFROM (\n    SELECT\n        toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n        client_ip,\n        count(*) as request_count\n    FROM nginx_analytics.dwd_nginx_enriched_v3\n    WHERE $__timeFilter(log_time)\n    GROUP BY time, client_ip\n)\nWHERE request_count > 1000\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    time,\n    count(if(request_count > 1000, client_ip, null)) as high_volume_ips\nFROM (\n    SELECT\n        toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n        client_ip,\n        count(*) as request_count\n    FROM nginx_analytics.dwd_nginx_enriched_v3\n    WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    GROUP BY time, client_ip\n)\nWHERE request_count > 1000\nGROUP BY time\nORDER BY time"
         }
       ],
       "title": "高流量IP监控",
@@ -230,7 +279,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    countDistinct(client_ip) as suspicious_ips\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND client_ip IN (\n        SELECT client_ip\n        FROM nginx_analytics.dwd_nginx_enriched_v3\n        WHERE $__timeFilter(log_time)\n        GROUP BY client_ip\n        HAVING (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 20\n            AND count() > 20\n    )\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    countDistinct(client_ip) as suspicious_ips\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n    AND client_ip IN (\n        SELECT client_ip\n        FROM nginx_analytics.dwd_nginx_enriched_v3\n        WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\n        GROUP BY client_ip\n        HAVING (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 20\n            AND count() > 20\n    )\nGROUP BY time\nORDER BY time"
         }
       ],
       "title": "可疑IP检测",
@@ -297,7 +346,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    count() * 1.0 / uniq(client_ip) as avg_requests_per_ip\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    count() * 1.0 / uniq(client_ip) as avg_requests_per_ip\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\nGROUP BY time\nORDER BY time"
         }
       ],
       "title": "平均IP请求频率",
@@ -432,7 +481,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    client_ip,\n    count() as requests,\n    round((countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()), 2) as error_rate_pct,\n    round(avg(total_request_duration), 3) as avg_duration_sec,\n    uniq(request_uri_normalized) as unique_urls,\n    uniq(api_category) as unique_categories,\n    any(platform) as platform,\n    min(log_time) as first_seen,\n    max(log_time) as last_seen\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY client_ip\nORDER BY count() DESC\nLIMIT 50"
+          "rawSql": "SELECT\n    client_ip,\n    count() as requests,\n    round((countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()), 2) as error_rate_pct,\n    round(avg(total_request_duration), 3) as avg_duration_sec,\n    uniq(request_uri_normalized) as unique_urls,\n    uniq(api_category) as unique_categories,\n    any(platform) as platform,\n    min(log_time) as first_seen,\n    max(log_time) as last_seen\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\nGROUP BY client_ip\nORDER BY count() DESC\nLIMIT 50"
         }
       ],
       "title": "TOP活跃IP",
@@ -565,7 +614,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    client_ip,\n    count() as requests,\n    countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) as errors,\n    round((countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()), 2) as error_rate_pct,\n    countIf(response_status_code >= '400' AND response_status_code < '500') as client_errors,\n    countIf(response_status_code >= '500') as server_errors,\n    uniq(request_uri_normalized) as unique_urls,\n    countIf(response_status_code = '404') as not_found_errors,\n    CASE\n        WHEN count() > 10000 AND (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 50 THEN 'DDoS+恶意攻击'\n        WHEN count() > 10000 THEN 'DDoS攻击'\n        WHEN (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 50 THEN '恶意攻击'\n        WHEN countIf(response_status_code = '404') > 100 THEN '目录扫描'\n        WHEN uniq(request_uri_normalized) > 50 THEN '爬虫行为'\n        ELSE '可疑活动'\n    END as threat_type,\n    CASE\n        WHEN count() > 10000 AND (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 50 THEN '极高'\n        WHEN count() > 5000 OR (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 30 THEN '高'\n        WHEN count() > 1000 OR (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 20 THEN '中'\n        ELSE '低'\n    END as risk_level\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\nGROUP BY client_ip\nHAVING (count() > 1000 OR (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 20 OR countIf(response_status_code = '404') > 20)\nORDER BY count() DESC, error_rate_pct DESC\nLIMIT 20"
+          "rawSql": "SELECT\n    client_ip,\n    count() as requests,\n    countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) as errors,\n    round((countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()), 2) as error_rate_pct,\n    countIf(response_status_code >= '400' AND response_status_code < '500') as client_errors,\n    countIf(response_status_code >= '500') as server_errors,\n    uniq(request_uri_normalized) as unique_urls,\n    countIf(response_status_code = '404') as not_found_errors,\n    CASE\n        WHEN count() > 10000 AND (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 50 THEN 'DDoS+恶意攻击'\n        WHEN count() > 10000 THEN 'DDoS攻击'\n        WHEN (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 50 THEN '恶意攻击'\n        WHEN countIf(response_status_code = '404') > 100 THEN '目录扫描'\n        WHEN uniq(request_uri_normalized) > 50 THEN '爬虫行为'\n        ELSE '可疑活动'\n    END as threat_type,\n    CASE\n        WHEN count() > 10000 AND (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 50 THEN '极高'\n        WHEN count() > 5000 OR (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 30 THEN '高'\n        WHEN count() > 1000 OR (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 20 THEN '中'\n        ELSE '低'\n    END as risk_level\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(business_domain IN (${business_domain:singlequote}), $business_domain)\nGROUP BY client_ip\nHAVING (count() > 1000 OR (countIf(response_status_code NOT IN ('200', '201', '202', '204', '301', '302', '304')) * 100.0 / count()) > 20 OR countIf(response_status_code = '404') > 20)\nORDER BY count() DESC, error_rate_pct DESC\nLIMIT 20"
         }
       ],
       "title": "异常IP分析",
@@ -600,6 +649,69 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "includeAll": true,
+        "label": "业务系统",
+        "multi": true,
+        "name": "business_unit",
+        "options": [],
+        "query": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "includeAll": true,
+        "label": "环境",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "includeAll": true,
+        "label": "业务域",
+        "multi": true,
+        "name": "business_domain",
+        "options": [],
+        "query": "SELECT DISTINCT business_domain FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_domain IS NOT NULL AND business_domain != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
       }
     ]
   },

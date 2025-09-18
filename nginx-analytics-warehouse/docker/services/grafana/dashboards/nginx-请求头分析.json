@@ -7,7 +7,56 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🔗 请求头性能关联分析",
+      "tooltip": "查看请求头与性能的关联分析",
+      "type": "link",
+      "url": "/d/nginx-header-performance-correlation?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🔄 HTTP生命周期分析",
+      "tooltip": "查看HTTP请求生命周期",
+      "type": "link",
+      "url": "/d/nginx-http-lifecycle?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🌍 IP来源分析",
+      "tooltip": "查看IP来源和地理位置分析",
+      "type": "link",
+      "url": "/d/nginx-ip-source-analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "🔙 返回L2专项分析",
+      "tooltip": "返回L2专项分析大屏",
+      "type": "link",
+      "url": "/d/l2-specialized-analysis?${__url_time_range}&var-business_unit=${business_unit}&var-environment=${environment}"
+    }
+  ],
   "panels": [
     {
       "datasource": {
@@ -70,7 +119,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT countDistinct(user_agent_string) as unique_user_agents FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-'"
+          "rawSql": "SELECT countDistinct(user_agent_string) as unique_user_agents FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type) AND user_agent_string != '' AND user_agent_string != '-'"
         }
       ],
       "title": "🌐 独立User-Agent数",
@@ -137,7 +186,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT countDistinct(referer_url) as unique_referers FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND referer_url != '' AND referer_url != '-'"
+          "rawSql": "SELECT countDistinct(referer_url) as unique_referers FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type) AND referer_url != '' AND referer_url != '-'"
         }
       ],
       "title": "🔗 独立Referer数",
@@ -204,7 +253,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT countIf(user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%') * 100.0 / count() as bot_percentage FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)"
+          "rawSql": "SELECT countIf(user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%') * 100.0 / count() as bot_percentage FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)"
         }
       ],
       "title": "🤖 机器人流量占比",
@@ -271,7 +320,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT countIf(user_agent_string = '' OR user_agent_string = '-') * 100.0 / count() as empty_ua_percentage FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)"
+          "rawSql": "SELECT countIf(user_agent_string = '' OR user_agent_string = '-') * 100.0 / count() as empty_ua_percentage FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)"
         }
       ],
       "title": "🚫 空User-Agent占比",
@@ -323,7 +372,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT user_agent_string as `User-Agent字符串`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)) as `占比(%)`, countIf(response_status_code >= '400') as `错误请求`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND user_agent_string != '' AND user_agent_string != '-' GROUP BY user_agent_string ORDER BY count() DESC LIMIT 20"
+          "rawSql": "SELECT user_agent_string as `User-Agent字符串`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)) as `占比(%)`, countIf(response_status_code >= '400') as `错误请求`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type) AND user_agent_string != '' AND user_agent_string != '-' GROUP BY user_agent_string ORDER BY count() DESC LIMIT 20"
         }
       ],
       "title": "🌐 TOP20 User-Agent分析",
@@ -375,7 +424,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT CASE WHEN user_agent_string LIKE '%Chrome%' THEN 'Chrome' WHEN user_agent_string LIKE '%Firefox%' THEN 'Firefox' WHEN user_agent_string LIKE '%Safari%' AND user_agent_string NOT LIKE '%Chrome%' THEN 'Safari' WHEN user_agent_string LIKE '%Edge%' THEN 'Edge' WHEN user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%' THEN 'Bot/Crawler' WHEN user_agent_string = '' OR user_agent_string = '-' THEN 'Empty' ELSE 'Other' END as `浏览器类型`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)) as `占比(%)`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY `浏览器类型` ORDER BY count() DESC"
+          "rawSql": "SELECT CASE WHEN user_agent_string LIKE '%Chrome%' THEN 'Chrome' WHEN user_agent_string LIKE '%Firefox%' THEN 'Firefox' WHEN user_agent_string LIKE '%Safari%' AND user_agent_string NOT LIKE '%Chrome%' THEN 'Safari' WHEN user_agent_string LIKE '%Edge%' THEN 'Edge' WHEN user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%' THEN 'Bot/Crawler' WHEN user_agent_string = '' OR user_agent_string = '-' THEN 'Empty' ELSE 'Other' END as `浏览器类型`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)) as `占比(%)`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type) GROUP BY `浏览器类型` ORDER BY count() DESC"
         }
       ],
       "title": "🖥️ 浏览器类型分析",
@@ -427,7 +476,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT referer_url as `Referer`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)) as `占比(%)`, countDistinct(client_ip) as `独立访客`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND referer_url != '' AND referer_url != '-' GROUP BY referer_url ORDER BY count() DESC LIMIT 20"
+          "rawSql": "SELECT referer_url as `Referer`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)) as `占比(%)`, countDistinct(client_ip) as `独立访客`, avg(total_request_duration * 1000) as `平均响应时间(ms)` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type) AND referer_url != '' AND referer_url != '-' GROUP BY referer_url ORDER BY count() DESC LIMIT 20"
         }
       ],
       "title": "🔗 TOP20 Referer来源分析",
@@ -479,7 +528,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT CASE WHEN referer_domain LIKE '%google.%' THEN 'Google搜索' WHEN referer_domain LIKE '%baidu.%' THEN '百度搜索' WHEN referer_domain LIKE '%bing.%' THEN 'Bing搜索' WHEN referer_domain LIKE '%weibo.%' THEN '微博' WHEN referer_domain LIKE '%qq.%' THEN 'QQ相关' WHEN referer_domain LIKE '%wechat%' OR referer_domain LIKE '%weixin%' THEN '微信' WHEN referer_domain = '' OR referer_domain = '-' THEN '直接访问' ELSE '其他来源' END as `来源类型`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)) as `占比(%)`, countDistinct(client_ip) as `独立访客` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY `来源类型` ORDER BY count() DESC"
+          "rawSql": "SELECT CASE WHEN referer_domain LIKE '%google.%' THEN 'Google搜索' WHEN referer_domain LIKE '%baidu.%' THEN '百度搜索' WHEN referer_domain LIKE '%bing.%' THEN 'Bing搜索' WHEN referer_domain LIKE '%weibo.%' THEN '微博' WHEN referer_domain LIKE '%qq.%' THEN 'QQ相关' WHEN referer_domain LIKE '%wechat%' OR referer_domain LIKE '%weixin%' THEN '微信' WHEN referer_domain = '' OR referer_domain = '-' THEN '直接访问' ELSE '其他来源' END as `来源类型`, count() as `请求数`, count() * 100.0 / (SELECT count() FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type)) as `占比(%)`, countDistinct(client_ip) as `独立访客` FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type) GROUP BY `来源类型` ORDER BY count() DESC"
         }
       ],
       "title": "🌍 来源类型分析",
@@ -566,7 +615,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT $__timeInterval(log_time) as time, CASE WHEN user_agent_string LIKE '%Chrome%' THEN 'Chrome' WHEN user_agent_string LIKE '%Firefox%' THEN 'Firefox' WHEN user_agent_string LIKE '%Safari%' AND user_agent_string NOT LIKE '%Chrome%' THEN 'Safari' WHEN user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%' THEN 'Bot/Crawler' ELSE 'Other' END as browser_type, count() as requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time, browser_type ORDER BY time"
+          "rawSql": "SELECT $__timeInterval(log_time) as time, CASE WHEN user_agent_string LIKE '%Chrome%' THEN 'Chrome' WHEN user_agent_string LIKE '%Firefox%' THEN 'Firefox' WHEN user_agent_string LIKE '%Safari%' AND user_agent_string NOT LIKE '%Chrome%' THEN 'Safari' WHEN user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%' THEN 'Bot/Crawler' ELSE 'Other' END as browser_type, count() as requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type) GROUP BY time, browser_type ORDER BY time"
         }
       ],
       "title": "📈 浏览器类型请求趋势",
@@ -653,7 +702,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT $__timeInterval(log_time) as time, countIf(user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%') as bot_requests, countIf(user_agent_string NOT LIKE '%bot%' AND user_agent_string NOT LIKE '%crawler%' AND user_agent_string NOT LIKE '%spider%') as human_requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time ORDER BY time"
+          "rawSql": "SELECT $__timeInterval(log_time) as time, countIf(user_agent_string LIKE '%bot%' OR user_agent_string LIKE '%crawler%' OR user_agent_string LIKE '%spider%') as bot_requests, countIf(user_agent_string NOT LIKE '%bot%' AND user_agent_string NOT LIKE '%crawler%' AND user_agent_string NOT LIKE '%spider%') as human_requests FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(os_type IN (${os_type:singlequote}), $os_type) GROUP BY time ORDER BY time"
         }
       ],
       "title": "🤖 机器人vs人工访问趋势",
@@ -689,6 +738,89 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "includeAll": true,
+        "label": "业务系统",
+        "multi": true,
+        "name": "business_unit",
+        "options": [],
+        "query": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "includeAll": true,
+        "label": "环境",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "includeAll": true,
+        "label": "平台类型",
+        "multi": true,
+        "name": "platform_type",
+        "options": [],
+        "query": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT os_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE os_type != 'unknown'",
+        "includeAll": true,
+        "label": "操作系统",
+        "multi": true,
+        "name": "os_type",
+        "options": [],
+        "query": "SELECT DISTINCT os_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE os_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
       }
     ]
   },

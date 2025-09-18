@@ -118,7 +118,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT toDateTime(intDiv(toUnixTimestamp(log_time), $__interval_s) * $__interval_s) as time, avg(total_request_duration) as value , avg(upstream_response_time) as value2 , avg(upstream_connect_time) as value3 , avg(total_request_duration - upstream_response_time) as \"Nginx\" FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) GROUP BY time ORDER BY time"
+          "rawSql": "SELECT toDateTime(intDiv(toUnixTimestamp(log_time), $__interval_s) * $__interval_s) as time, avg(total_request_duration) as value , avg(upstream_response_time) as value2 , avg(upstream_connect_time) as value3 , avg(total_request_duration - upstream_response_time) as \"Nginx\" FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type) GROUP BY time ORDER BY time"
         }
       ]
     },
@@ -205,7 +205,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT 'unknown' as value , round(avg(upstream_connect_time) * 1000, 2) as \"(ms)\", round(quantile(0.95)(upstream_connect_time) * 1000, 2) as \"P95(ms)\", count() as value2 FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND upstream_connect_time > 0 UNION ALL SELECT 'unknown' as value , round(avg(upstream_response_time) * 1000, 2) as \"(ms)\", round(quantile(0.95)(upstream_response_time) * 1000, 2) as \"P95(ms)\", count() as value2 FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND upstream_response_time > 0 UNION ALL SELECT 'Nginx' as value , round(avg(total_request_duration - upstream_response_time) * 1000, 2) as \"(ms)\", round(quantile(0.95)(total_request_duration - upstream_response_time) * 1000, 2) as \"P95(ms)\", count() as value2 FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time) AND upstream_response_time > 0 AND total_request_duration > upstream_response_time ORDER BY \"(ms)\" DESC"
+          "rawSql": "SELECT 'unknown' as value , round(avg(upstream_connect_time) * 1000, 2) as \"(ms)\", round(quantile(0.95)(upstream_connect_time) * 1000, 2) as \"P95(ms)\", count() as value2 FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type) AND upstream_connect_time > 0 UNION ALL SELECT 'unknown' as value , round(avg(upstream_response_time) * 1000, 2) as \"(ms)\", round(quantile(0.95)(upstream_response_time) * 1000, 2) as \"P95(ms)\", count() as value2 FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type) AND upstream_response_time > 0 UNION ALL SELECT 'Nginx' as value , round(avg(total_request_duration - upstream_response_time) * 1000, 2) as \"(ms)\", round(quantile(0.95)(total_request_duration - upstream_response_time) * 1000, 2) as \"P95(ms)\", count() as value2 FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type) AND upstream_response_time > 0 AND total_request_duration > upstream_response_time ORDER BY \"(ms)\" DESC"
         }
       ]
     },
@@ -282,7 +282,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    quantile(0.5)(upstream_connect_time * 1000) as connect_p50_ms,\n    quantile(0.95)(upstream_connect_time * 1000) as connect_p95_ms,\n    quantile(0.5)(upstream_response_time * 1000) as response_p50_ms,\n    quantile(0.95)(upstream_response_time * 1000) as response_p95_ms\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND upstream_connect_time > 0\n    AND upstream_response_time > 0\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    quantile(0.5)(upstream_connect_time * 1000) as connect_p50_ms,\n    quantile(0.95)(upstream_connect_time * 1000) as connect_p95_ms,\n    quantile(0.5)(upstream_response_time * 1000) as response_p50_ms,\n    quantile(0.95)(upstream_response_time * 1000) as response_p95_ms\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND upstream_connect_time > 0\n    AND upstream_response_time > 0\nGROUP BY time\nORDER BY time"
         }
       ]
     },
@@ -370,7 +370,7 @@
           },
           "queryType": "timeseries",
           "refId": "A",
-          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    quantile(0.5)(upstream_connect_time * 1000) as connect_p50,\n    quantile(0.95)(upstream_connect_time * 1000) as connect_p95,\n    quantile(0.5)(upstream_response_time * 1000) as response_p50,\n    quantile(0.95)(upstream_response_time * 1000) as response_p95\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND upstream_connect_time > 0\n    AND upstream_response_time > 0\nGROUP BY time\nORDER BY time"
+          "rawSql": "SELECT\n    toStartOfInterval(log_time, toIntervalSecond($__interval_s)) as time,\n    quantile(0.5)(upstream_connect_time * 1000) as connect_p50,\n    quantile(0.95)(upstream_connect_time * 1000) as connect_p95,\n    quantile(0.5)(upstream_response_time * 1000) as response_p50,\n    quantile(0.95)(upstream_response_time * 1000) as response_p95\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND upstream_connect_time > 0\n    AND upstream_response_time > 0\nGROUP BY time\nORDER BY time"
         }
       ]
     },
@@ -469,7 +469,7 @@
           },
           "queryType": "table",
           "refId": "A",
-          "rawSql": "SELECT\n    request_uri_normalized as request_uri,\n    round(avg(upstream_connect_time) * 1000, 2) as avg_connect_ms,\n    round(avg(upstream_response_time) * 1000, 2) as avg_response_ms,\n    round(avg(total_request_duration - upstream_response_time) * 1000, 2) as avg_nginx_ms,\n    round(avg(total_request_duration) * 1000, 2) as avg_total_ms,\n    count() as total_requests,\n    CASE\n        WHEN avg(upstream_connect_time) > 0.1 THEN 'Slow_Connect'\n        WHEN avg(upstream_response_time) > 1.0 THEN 'Slow_Response'\n        WHEN avg(total_request_duration - upstream_response_time) > 0.05 THEN 'Nginx_Delay'\n        ELSE 'Normal'\n    END as performance_status\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND upstream_response_time > 0\n    AND upstream_connect_time > 0\nGROUP BY request_uri_normalized\nHAVING count() > 10\nORDER BY avg_total_ms DESC\nLIMIT 20"
+          "rawSql": "SELECT\n    request_uri_normalized as request_uri,\n    round(avg(upstream_connect_time) * 1000, 2) as avg_connect_ms,\n    round(avg(upstream_response_time) * 1000, 2) as avg_response_ms,\n    round(avg(total_request_duration - upstream_response_time) * 1000, 2) as avg_nginx_ms,\n    round(avg(total_request_duration) * 1000, 2) as avg_total_ms,\n    count() as total_requests,\n    CASE\n        WHEN avg(upstream_connect_time) > 0.1 THEN 'Slow_Connect'\n        WHEN avg(upstream_response_time) > 1.0 THEN 'Slow_Response'\n        WHEN avg(total_request_duration - upstream_response_time) > 0.05 THEN 'Nginx_Delay'\n        ELSE 'Normal'\n    END as performance_status\nFROM nginx_analytics.dwd_nginx_enriched_v3\nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n    AND $__conditionalAll(platform_type IN (${platform_type:singlequote}), $platform_type)\n    AND $__conditionalAll(device_type IN (${device_type:singlequote}), $device_type)\n    AND upstream_response_time > 0\n    AND upstream_connect_time > 0\nGROUP BY request_uri_normalized\nHAVING count() > 10\nORDER BY avg_total_ms DESC\nLIMIT 20"
         }
       ]
     }
@@ -501,6 +501,90 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "includeAll": true,
+        "label": "业务系统",
+        "multi": true,
+        "name": "business_unit",
+        "options": [],
+        "query": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "includeAll": true,
+        "label": "环境",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "includeAll": true,
+        "label": "平台类型",
+        "multi": true,
+        "name": "platform_type",
+        "options": [],
+        "query": "SELECT DISTINCT platform_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE platform_type IS NOT NULL AND platform_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT device_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE device_type IS NOT NULL AND device_type != 'unknown'",
+        "includeAll": true,
+        "label": "设备类型",
+        "multi": true,
+        "name": "device_type",
+        "options": [],
+        "query": "SELECT DISTINCT device_type FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE device_type IS NOT NULL AND device_type != 'unknown'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
       }
     ]
   },

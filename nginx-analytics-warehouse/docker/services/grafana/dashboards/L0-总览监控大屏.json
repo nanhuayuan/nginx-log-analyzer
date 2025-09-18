@@ -135,7 +135,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  CASE \n    WHEN error_rate < 1 AND avg_response_time < 500 THEN 95\n    WHEN error_rate < 2 AND avg_response_time < 1000 THEN 85\n    WHEN error_rate < 5 AND avg_response_time < 2000 THEN 75\n    WHEN error_rate < 10 AND avg_response_time < 5000 THEN 60\n    ELSE 40\n  END as health_score\nFROM (\n  SELECT \n    countIf(response_status_code != '200')*100.0/count(*) as error_rate,\n    avg(total_request_duration) as avg_response_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n)",
+          "rawSql": "SELECT \n  CASE \n    WHEN error_rate < 1 AND avg_response_time < 500 THEN 95\n    WHEN error_rate < 2 AND avg_response_time < 1000 THEN 85\n    WHEN error_rate < 5 AND avg_response_time < 2000 THEN 75\n    WHEN error_rate < 10 AND avg_response_time < 5000 THEN 60\n    ELSE 40\n  END as health_score\nFROM (\n  SELECT \n    countIf(response_status_code != '200')*100.0/count(*) as error_rate,\n    avg(total_request_duration) as avg_response_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n)",
           "refId": "A"
         }
       ],
@@ -205,7 +205,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  toStartOfInterval(log_time, INTERVAL 1 MINUTE) as time,\n  count()/60 as qps\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\nGROUP BY time \nORDER BY time DESC \nLIMIT 1",
+          "rawSql": "SELECT \n  toStartOfInterval(log_time, INTERVAL 1 MINUTE) as time,\n  count()/60 as qps\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\nGROUP BY time \nORDER BY time DESC \nLIMIT 1",
           "refId": "A"
         }
       ],
@@ -275,7 +275,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT avg(total_request_duration) as avg_rt \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)",
+          "rawSql": "SELECT avg(total_request_duration) as avg_rt \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)",
           "refId": "A"
         }
       ],
@@ -290,30 +290,14 @@
       "description": "错误率百分比",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
+          "links": [
+            {
+              "title": "查看错误详情",
+              "url": "/d/nginx-interface-error-analysis?from=${__from}&to=${__to}&timezone=Asia%2FShanghai",
+              "targetBlank": true
+            }
+          ]
+        }
       },
       "gridPos": {
         "h": 4,
@@ -345,23 +329,12 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT countIf(response_status_code != '200')*100.0/count(*) as error_rate \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)",
+          "rawSql": "SELECT countIf(response_status_code != '200')*100.0/count(*) as error_rate \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)",
           "refId": "A"
         }
       ],
       "title": "❌ 错误率",
-      "type": "stat",
-      "fieldConfig": {
-        "defaults": {
-          "links": [
-            {
-              "title": "查看错误详情",
-              "url": "/d/nginx-interface-error-analysis?from=${__from}&to=${__to}&timezone=Asia%2FShanghai",
-              "targetBlank": true
-            }
-          ]
-        }
-      }
+      "type": "stat"
     },
     {
       "datasource": {
@@ -426,7 +399,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  CASE \n    WHEN error_rate < 1 THEN 95\n    WHEN error_rate < 2 THEN 85\n    WHEN error_rate < 5 THEN 75\n    WHEN error_rate < 10 THEN 60\n    ELSE 40\n  END as quality_score \nFROM (\n  SELECT countIf(response_status_code != '200')*100.0/count(*) as error_rate\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n)",
+          "rawSql": "SELECT \n  CASE \n    WHEN error_rate < 1 THEN 95\n    WHEN error_rate < 2 THEN 85\n    WHEN error_rate < 5 THEN 75\n    WHEN error_rate < 10 THEN 60\n    ELSE 40\n  END as quality_score \nFROM (\n  SELECT countIf(response_status_code != '200')*100.0/count(*) as error_rate\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n)",
           "refId": "A"
         }
       ],
@@ -488,7 +461,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT count(*) as gov_requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND request_uri LIKE '%gov%'",
+          "rawSql": "SELECT count(*) as gov_requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \n  AND request_uri LIKE '%gov%'",
           "refId": "A"
         }
       ],
@@ -550,7 +523,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT count(*) as harmony_requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \n  AND os_type = 'HarmonyOS'",
+          "rawSql": "SELECT count(*) as harmony_requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \n  AND os_type = 'HarmonyOS'",
           "refId": "A"
         }
       ],
@@ -611,7 +584,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  business_criticality, \n  count(*) as requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY business_criticality \nORDER BY requests DESC",
+          "rawSql": "SELECT \n  business_criticality, \n  count(*) as requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \nGROUP BY business_criticality \nORDER BY requests DESC",
           "refId": "A"
         }
       ],
@@ -672,7 +645,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  CASE \n    WHEN request_uri LIKE '%gov%' THEN 'Government-App'\n    WHEN os_type = 'HarmonyOS' THEN 'HarmonyOS'\n    WHEN platform = 'iOS' THEN 'iOS'\n    WHEN platform = 'Android' THEN 'Android'\n    WHEN device_type = 'Desktop' THEN 'Desktop'\n    ELSE 'Other'\n  END as platform_enhanced,\n  count(*) as requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY platform_enhanced \nORDER BY requests DESC",
+          "rawSql": "SELECT \n  CASE \n    WHEN request_uri LIKE '%gov%' THEN 'Government-App'\n    WHEN os_type = 'HarmonyOS' THEN 'HarmonyOS'\n    WHEN platform = 'iOS' THEN 'iOS'\n    WHEN platform = 'Android' THEN 'Android'\n    WHEN device_type = 'Desktop' THEN 'Desktop'\n    ELSE 'Other'\n  END as platform_enhanced,\n  count(*) as requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \nGROUP BY platform_enhanced \nORDER BY requests DESC",
           "refId": "A"
         }
       ],
@@ -733,7 +706,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  CASE \n    WHEN referer_url LIKE '%.gov.%' THEN 'Government'\n    WHEN referer_url LIKE '%search%' OR referer_url LIKE '%baidu%' OR referer_url LIKE '%google%' THEN 'Search Engine'\n    WHEN referer_url LIKE '%weixin%' OR referer_url LIKE '%qq%' THEN 'Social Media'\n    WHEN referer_url = '' THEN 'Direct'\n    ELSE 'Other'\n  END as referer_type,\n  count(*) as requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY referer_type \nORDER BY requests DESC",
+          "rawSql": "SELECT \n  CASE \n    WHEN referer_url LIKE '%.gov.%' THEN 'Government'\n    WHEN referer_url LIKE '%search%' OR referer_url LIKE '%baidu%' OR referer_url LIKE '%google%' THEN 'Search Engine'\n    WHEN referer_url LIKE '%weixin%' OR referer_url LIKE '%qq%' THEN 'Social Media'\n    WHEN referer_url = '' THEN 'Direct'\n    ELSE 'Other'\n  END as referer_type,\n  count(*) as requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \nGROUP BY referer_type \nORDER BY requests DESC",
           "refId": "A"
         }
       ],
@@ -846,7 +819,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  toStartOfInterval(log_time, INTERVAL 1 MINUTE) as time,\n  count()/60 as total_qps,\n  countIf(response_status_code = '200')/60 as success_qps,\n  countIf(request_uri LIKE '%gov%')/60 as gov_qps,\n  countIf(os_type = 'HarmonyOS')/60 as harmony_qps,\n  countIf(response_status_code = '200')*100.0/count() as success_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY time \nORDER BY time",
+          "rawSql": "SELECT \n  toStartOfInterval(log_time, INTERVAL 1 MINUTE) as time,\n  count()/60 as total_qps,\n  countIf(response_status_code = '200')/60 as success_qps,\n  countIf(request_uri LIKE '%gov%')/60 as gov_qps,\n  countIf(os_type = 'HarmonyOS')/60 as harmony_qps,\n  countIf(response_status_code = '200')*100.0/count() as success_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \nGROUP BY time \nORDER BY time",
           "refId": "A"
         }
       ],
@@ -861,54 +834,21 @@
       "description": "业务域访问分布和API复杂度统计",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
           "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "gradientMode": "none",
             "hideFrom": {
               "legend": false,
               "tooltip": false,
               "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
             }
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
+          "links": [
+            {
+              "title": "查看业务域详情",
+              "url": "/d/l1-business-domain-dashboard?var-business_domain=${__field.name}&from=${__from}&to=${__to}&timezone=Asia%2FShanghai",
+              "targetBlank": true
+            }
+          ]
+        }
       },
       "gridPos": {
         "h": 8,
@@ -935,30 +875,12 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  CASE \n    WHEN request_uri LIKE '/api/user%' THEN 'User Service'\n    WHEN request_uri LIKE '/api/search%' THEN 'Search Service' \n    WHEN request_uri LIKE '/api/gov%' THEN 'Government Service'\n    WHEN request_uri LIKE '/api/file%' THEN 'File Service'\n    WHEN request_uri LIKE '/static%' THEN 'Static Resources'\n    ELSE 'Other Services'\n  END as service_domain,\n  count(*) as requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY service_domain \nORDER BY requests DESC \nLIMIT 10",
+          "rawSql": "SELECT \n  CASE \n    WHEN request_uri LIKE '/api/user%' THEN 'User Service'\n    WHEN request_uri LIKE '/api/search%' THEN 'Search Service' \n    WHEN request_uri LIKE '/api/gov%' THEN 'Government Service'\n    WHEN request_uri LIKE '/api/file%' THEN 'File Service'\n    WHEN request_uri LIKE '/static%' THEN 'Static Resources'\n    ELSE 'Other Services'\n  END as service_domain,\n  count(*) as requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \nGROUP BY service_domain \nORDER BY requests DESC \nLIMIT 10",
           "refId": "A"
         }
       ],
       "title": "🏢 业务域访问TOP10",
-      "type": "barchart",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            }
-          },
-          "links": [
-            {
-              "title": "查看业务域详情",
-              "url": "/d/l1-business-domain-dashboard?var-business_domain=${__field.name}&from=${__from}&to=${__to}&timezone=Asia%2FShanghai",
-              "targetBlank": true
-            }
-          ]
-        }
-      }
+      "type": "barchart"
     },
     {
       "datasource": {
@@ -1042,7 +964,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  CASE \n    WHEN length(request_uri) > 100 OR query_params_count > 10 THEN 'Complex'\n    WHEN length(request_uri) > 50 OR query_params_count > 3 THEN 'Medium'\n    ELSE 'Simple'\n  END as complexity_level,\n  count(*) as requests,\n  avg(total_request_duration) as avg_response_time\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time) \nGROUP BY complexity_level \nORDER BY requests DESC",
+          "rawSql": "SELECT \n  CASE \n    WHEN length(request_uri) > 100 OR query_params_count > 10 THEN 'Complex'\n    WHEN length(request_uri) > 50 OR query_params_count > 3 THEN 'Medium'\n    ELSE 'Simple'\n  END as complexity_level,\n  count(*) as requests,\n  avg(total_request_duration) as avg_response_time\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \nGROUP BY complexity_level \nORDER BY requests DESC",
           "refId": "A"
         }
       ],
@@ -1055,54 +977,6 @@
         "uid": "${DS_CLICKHOUSE}"
       },
       "description": "当前系统告警和问题汇总",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto",
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 24
-      },
-      "id": 14,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "9.5.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "${DS_CLICKHOUSE}"
-          },
-          "queryType": "table",
-          "rawSql": "SELECT \n  '系统性能' as \"检查项目\",\n  CASE \n    WHEN avg(total_request_duration) > 3000 THEN '严重'\n    WHEN avg(total_request_duration) > 1000 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('平均响应时间: ', toString(round(avg(total_request_duration))), 'ms') as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_api_performance_analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\nUNION ALL\nSELECT \n  '错误率监控' as \"检查项目\",\n  CASE \n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 10 THEN '严重'\n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 2 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('错误率: ', toString(round(countIf(response_status_code != '200')*100.0/count(*), 2)), '%') as \"详细信息\",\n  countIf(response_status_code != '200') as \"请求总数\",\n  'nginx-interface-error-analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\nUNION ALL\nSELECT \n  '流量总览' as \"检查项目\",\n  '正常' as \"告警级别\",\n  concat('总请求数: ', toString(count(*))) as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_comprehensive_monitoring_fixed' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)",
-          "refId": "A"
-        }
-      ],
-      "title": "⚠️ 系统告警汇总",
-      "type": "table",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -1186,7 +1060,31 @@
             ]
           }
         ]
-      }
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 14,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "9.5.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "${DS_CLICKHOUSE}"
+          },
+          "queryType": "table",
+          "rawSql": "SELECT \n  '系统性能' as \"检查项目\",\n  CASE \n    WHEN avg(total_request_duration) > 3000 THEN '严重'\n    WHEN avg(total_request_duration) > 1000 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('平均响应时间: ', toString(round(avg(total_request_duration))), 'ms') as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_api_performance_analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\nUNION ALL\nSELECT \n  '错误率监控' as \"检查项目\",\n  CASE \n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 10 THEN '严重'\n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 2 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('错误率: ', toString(round(countIf(response_status_code != '200')*100.0/count(*), 2)), '%') as \"详细信息\",\n  countIf(response_status_code != '200') as \"请求总数\",\n  'nginx-interface-error-analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\nUNION ALL\nSELECT \n  '流量总览' as \"检查项目\",\n  '正常' as \"告警级别\",\n  concat('总请求数: ', toString(count(*))) as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_comprehensive_monitoring_fixed' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)",
+          "refId": "A"
+        }
+      ],
+      "title": "⚠️ 系统告警汇总",
+      "type": "table"
     }
   ],
   "refresh": "30s",
@@ -1216,6 +1114,48 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "includeAll": true,
+        "label": "业务系统",
+        "multi": true,
+        "name": "business_unit",
+        "options": [],
+        "query": "SELECT DISTINCT business_unit FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE business_unit IS NOT NULL AND business_unit != ''",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "${DS_CLICKHOUSE}"
+        },
+        "definition": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "includeAll": true,
+        "label": "环境",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "SELECT DISTINCT environment FROM nginx_analytics.dwd_nginx_enriched_v3 WHERE environment IS NOT NULL AND environment != '' AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
       }
     ]
   },
