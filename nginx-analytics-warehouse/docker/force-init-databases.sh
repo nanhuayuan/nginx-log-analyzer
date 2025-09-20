@@ -55,19 +55,18 @@ init_n9e_database() {
     # 先删除现有数据库（如果存在）
     docker exec n9e-mysql mysql -uroot -p1234 -e "DROP DATABASE IF EXISTS n9e_v6;" || true
 
-    # 执行完整的初始化脚本
-    if docker exec n9e-mysql mysql -uroot -p1234 < services/n9e/init-scripts/00-init-database.sql; then
-        log_success "N9E数据库初始化完成"
-    else
-        log_error "N9E数据库初始化失败"
-        return 1
-    fi
-
-    # 如果存在完整的schema文件，也执行它
+    # 执行完整的N9E schema文件
     if [ -f "services/n9e/init-scripts/a-n9e.sql" ]; then
         log_info "执行完整的N9E schema..."
-        docker exec n9e-mysql mysql -uroot -p1234 < services/n9e/init-scripts/a-n9e.sql
-        log_success "N9E完整schema加载完成"
+        if docker exec n9e-mysql mysql -uroot -p1234 < services/n9e/init-scripts/a-n9e.sql; then
+            log_success "N9E数据库初始化完成"
+        else
+            log_error "N9E数据库初始化失败"
+            return 1
+        fi
+    else
+        log_error "N9E初始化脚本不存在: services/n9e/init-scripts/a-n9e.sql"
+        return 1
     fi
 }
 

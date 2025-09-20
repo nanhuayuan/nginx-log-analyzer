@@ -35,7 +35,6 @@ log_error() {
 declare -A required_files=(
     ["docker-compose.yml"]="Docker Compose配置文件"
     [".env"]="环境变量配置文件"
-    ["services/n9e/init-scripts/00-init-database.sql"]="N9E数据库初始化脚本"
     ["services/n9e/init-scripts/a-n9e.sql"]="N9E完整数据库结构"
     ["services/n9e/config/nightingale/config.toml"]="Nightingale配置文件"
     ["services/grafana/datasources/clickhouse.yml"]="Grafana ClickHouse数据源配置"
@@ -126,9 +125,10 @@ check_file_contents() {
     fi
 
     # 检查N9E初始化脚本
-    if [ -f "services/n9e/init-scripts/00-init-database.sql" ]; then
-        if grep -q "CREATE DATABASE IF NOT EXISTS n9e_v6" services/n9e/init-scripts/00-init-database.sql && \
-           grep -q "CREATE TABLE IF NOT EXISTS.*users" services/n9e/init-scripts/00-init-database.sql; then
+    if [ -f "services/n9e/init-scripts/a-n9e.sql" ]; then
+        if grep -q "create database n9e_v6" services/n9e/init-scripts/a-n9e.sql && \
+           grep -q "CREATE TABLE.*users" services/n9e/init-scripts/a-n9e.sql && \
+           grep -q "CREATE TABLE.*role_operation" services/n9e/init-scripts/a-n9e.sql; then
             log_success "N9E初始化脚本内容验证通过"
         else
             log_error "N9E初始化脚本内容验证失败"
