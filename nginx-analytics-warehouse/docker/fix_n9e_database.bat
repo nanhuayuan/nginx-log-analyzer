@@ -131,16 +131,32 @@ if not exist "services\n9e\init-scripts\a-n9e.sql" (
 
 :: 执行初始化脚本
 echo [执行] 执行数据库初始化...
-docker cp "services\n9e\init-scripts\a-n9e.sql" n9e-mysql:/tmp/init.sql
+docker cp "services\n9e\init-scripts\a-n9e.sql" n9e-mysql:/tmp/a-n9e.sql
 if errorlevel 1 (
-    echo [错误] 复制初始化脚本失败
+    echo [错误] 复制主初始化脚本失败
     pause
     exit /b 1
 )
 
-docker exec n9e-mysql mysql -uroot -p1234 -e "source /tmp/init.sql"
+docker cp "services\n9e\init-scripts\c-init.sql" n9e-mysql:/tmp/c-init.sql
 if errorlevel 1 (
-    echo [错误] 执行初始化脚本失败
+    echo [错误] 复制权限脚本失败
+    pause
+    exit /b 1
+)
+
+echo [执行] 执行主数据库脚本...
+docker exec n9e-mysql mysql -uroot -p1234 -e "source /tmp/a-n9e.sql"
+if errorlevel 1 (
+    echo [错误] 执行主初始化脚本失败
+    pause
+    exit /b 1
+)
+
+echo [执行] 执行权限配置脚本...
+docker exec n9e-mysql mysql -uroot -p1234 -e "source /tmp/c-init.sql"
+if errorlevel 1 (
+    echo [错误] 执行权限脚本失败
     pause
     exit /b 1
 )
