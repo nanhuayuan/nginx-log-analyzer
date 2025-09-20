@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-集成超高性能ETL控制器 - 完全集成原有功能
-Integrated Ultra Performance ETL Controller
+集成超高性能ETL控制器 - 完全集成原有功能 + 自动文件发现
+Integrated Ultra Performance ETL Controller with Auto Discovery
 
 核心改进：
 1. 完全集成原有交互式流程和状态管理
@@ -10,6 +10,7 @@ Integrated Ultra Performance ETL Controller
 3. 优化进度刷新频率 (1-5分钟可配置)
 4. 保留所有原有功能特性
 5. 增强缓存管理防止内存膨胀
+6. 新增自动文件发现和监控功能
 """
 
 import sys
@@ -43,6 +44,72 @@ try:
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
+
+class AutoFileDiscovery:
+    """自动文件发现器"""
+
+    def __init__(self, log_dir: Path, scan_interval: int = 180):
+        self.log_dir = log_dir
+        self.scan_interval = scan_interval  # 默认3分钟
+        self.last_scan_time = 0
+        self.known_files = set()
+        self.logger = logging.getLogger(__name__)
+
+    def discover_new_files(self) -> List[Path]:
+        """发现新增的日志文件"""
+        current_time = time.time()
+        if current_time - self.last_scan_time < self.scan_interval:
+            return []
+
+        new_files = []
+        try:
+            if not self.log_dir.exists():
+                return []
+
+            # 扫描所有日期目录下的.log文件
+            for date_dir in self.log_dir.iterdir():
+                if date_dir.is_dir() and date_dir.name.isdigit() and len(date_dir.name) == 8:
+                    try:
+                        datetime.strptime(date_dir.name, '%Y%m%d')
+                        for log_file in date_dir.glob("*.log"):
+                            if log_file not in self.known_files:
+                                # 检查文件是否稳定（最后修改时间超过30秒）
+                                if time.time() - log_file.stat().st_mtime > 30:
+                                    new_files.append(log_file)
+                                    self.known_files.add(log_file)
+                    except (ValueError, OSError):
+                        continue
+
+            self.last_scan_time = current_time
+            if new_files:
+                self.logger.info(f"发现 {len(new_files)} 个新日志文件")
+
+        except Exception as e:
+            self.logger.error(f"文件发现过程出错: {e}")
+
+        return new_files
+
+    def initialize_known_files(self, existing_files: set = None):
+        """初始化已知文件列表"""
+        try:
+            if existing_files:
+                self.known_files.update(existing_files)
+
+            if not self.log_dir.exists():
+                return
+
+            for date_dir in self.log_dir.iterdir():
+                if date_dir.is_dir() and date_dir.name.isdigit() and len(date_dir.name) == 8:
+                    try:
+                        datetime.strptime(date_dir.name, '%Y%m%d')
+                        for log_file in date_dir.glob("*.log"):
+                            self.known_files.add(log_file)
+                    except (ValueError, OSError):
+                        continue
+
+            self.logger.info(f"初始化已知文件列表，共 {len(self.known_files)} 个文件")
+        except Exception as e:
+            self.logger.error(f"初始化已知文件列表失败: {e}")
 
 class PerformanceOptimizer:
     """性能优化器 - 解决性能衰减问题"""
@@ -364,12 +431,25 @@ class IntegratedUltraETLController:
         # 初始化系统
         self._init_connection_pool()
 
+        # 自动文件发现功能 (新增)
+        self.auto_discovery = AutoFileDiscovery(self.base_log_dir)
+        self.monitoring_enabled = False
+        self.monitoring_thread = None
+        self.stop_monitoring = threading.Event()
+        self.is_processing = False
+        self.processing_lock = threading.Lock()
+
+        # 初始化已知文件列表
+        existing_files = set(Path(f) for f in self.processed_state.get('processed_files', {}))
+        self.auto_discovery.initialize_known_files(existing_files)
+
         self.logger.info("🚀 集成超高性能ETL控制器初始化完成")
         self.logger.info(f"📁 日志目录: {self.base_log_dir}")
         self.logger.info(f"⚙️ 批处理大小: {self.batch_size:,}")
         self.logger.info(f"🧵 工作线程数: {self.max_workers}")
         self.logger.info(f"🔗 连接池大小: {self.connection_pool_size}")
         self.logger.info(f"📊 进度刷新间隔: {progress_refresh_minutes} 分钟")
+        self.logger.info(f"🔍 自动扫描间隔: {self.auto_discovery.scan_interval} 秒")
 
     def _setup_logger(self) -> logging.Logger:
         """设置日志记录器"""
@@ -977,6 +1057,118 @@ class IntegratedUltraETLController:
 
         print("="*80)
 
+    # === 自动文件发现和监控功能 (新增) ===
+
+    def auto_process_new_files(self) -> Dict[str, Any]:
+        """自动处理新发现的文件"""
+        with self.processing_lock:
+            if self.is_processing:
+                return {'success': False, 'error': 'Already processing', 'skipped': True}
+            self.is_processing = True
+
+        try:
+            start_time = time.time()
+            new_files = self.auto_discovery.discover_new_files()
+
+            if not new_files:
+                return {'success': True, 'new_files': 0, 'message': 'No new files found'}
+
+            self.logger.info(f"开始自动处理 {len(new_files)} 个新文件")
+
+            # 使用原有的高性能处理逻辑
+            total_records = 0
+            processed_files = 0
+            errors = []
+
+            for file_path in new_files:
+                try:
+                    # 使用原有的处理逻辑
+                    result = self._process_single_file(file_path, test_mode=False)
+                    if result['success'] and not result.get('skipped', False):
+                        total_records += result['records']
+                        processed_files += 1
+                    elif not result['success']:
+                        errors.append(f"{file_path}: {result.get('error', 'Unknown error')}")
+                except Exception as e:
+                    errors.append(f"{file_path}: {str(e)}")
+
+            processing_time = time.time() - start_time
+
+            result = {
+                'success': True,
+                'new_files': len(new_files),
+                'processed_files': processed_files,
+                'total_records': total_records,
+                'processing_time': processing_time,
+                'processing_speed': total_records / processing_time if processing_time > 0 else 0,
+                'errors': errors
+            }
+
+            if processed_files > 0:
+                self.logger.info(
+                    f"自动处理完成: {processed_files} 文件, {total_records:,} 记录, "
+                    f"速度 {result['processing_speed']:.1f} rec/s"
+                )
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"自动处理过程出错: {e}")
+            return {'success': False, 'error': str(e)}
+        finally:
+            with self.processing_lock:
+                self.is_processing = False
+
+    def monitoring_loop(self):
+        """监控循环线程"""
+        self.logger.info(f"自动监控已启动，扫描间隔 {self.auto_discovery.scan_interval} 秒")
+
+        while not self.stop_monitoring.is_set():
+            try:
+                # 等待扫描间隔
+                if self.stop_monitoring.wait(self.auto_discovery.scan_interval):
+                    break  # 收到停止信号
+
+                # 执行自动处理
+                result = self.auto_process_new_files()
+
+                if result.get('new_files', 0) > 0:
+                    print(f"\n🔍 自动发现并处理了 {result['processed_files']} 个新文件，"
+                          f"共 {result['total_records']:,} 条记录")
+                    print("👆 按回车键返回菜单，或等待继续监控...")
+
+            except Exception as e:
+                self.logger.error(f"监控循环出错: {e}")
+                time.sleep(60)  # 出错后等待1分钟再继续
+
+    def start_auto_monitoring(self):
+        """启动自动监控"""
+        if self.monitoring_enabled:
+            print("⚠️ 自动监控已经在运行中")
+            return False
+
+        self.monitoring_enabled = True
+        self.stop_monitoring.clear()
+        self.monitoring_thread = threading.Thread(target=self.monitoring_loop, daemon=True)
+        self.monitoring_thread.start()
+        print(f"✅ 自动监控已启动，扫描间隔 {self.auto_discovery.scan_interval} 秒")
+        print("💡 提示: 按 Ctrl+C 或输入任意键停止监控")
+        return True
+
+    def stop_auto_monitoring(self):
+        """停止自动监控"""
+        if not self.monitoring_enabled:
+            return False
+
+        self.monitoring_enabled = False
+        self.stop_monitoring.set()
+
+        if self.monitoring_thread and self.monitoring_thread.is_alive():
+            self.monitoring_thread.join(timeout=5)
+
+        print("✅ 自动监控已停止")
+        return True
+
     # === 完全兼容原有的交互式菜单 ===
 
     def interactive_menu(self):
@@ -1011,6 +1203,22 @@ class IntegratedUltraETLController:
                     result = self.process_all_parallel(test_mode=False, limit=limit)
                     if result['success']:
                         print(f"\\n✅ 处理完成: {result['total_records']:,} 记录, 速度 {result['processing_speed']:.1f} rec/s")
+
+                        # 处理完成后询问是否进入自动监控模式
+                        print("\\n🤖 处理完成！现在可以进入自动监控模式")
+                        print(f"📊 将每 {self.auto_discovery.scan_interval} 秒自动检查新文件并处理")
+                        auto_monitor = input("是否启动自动监控？(Y/n): ").strip().lower()
+
+                        if auto_monitor != 'n':
+                            self.start_auto_monitoring()
+                            try:
+                                print("\\n🔍 自动监控中...")
+                                print("💡 提示: 按回车键停止监控并返回菜单")
+                                input()  # 等待用户输入
+                            except KeyboardInterrupt:
+                                pass
+                            finally:
+                                self.stop_auto_monitoring()
                     else:
                         print(f"\\n❌ 处理失败: {result.get('error', '未知错误')}")
 
@@ -1070,6 +1278,7 @@ class IntegratedUltraETLController:
         print(f"  线程数: {self.max_workers}")
         print(f"  连接池: {self.connection_pool_size}")
         print(f"  进度刷新间隔: {self.progress_tracker.refresh_interval // 60} 分钟")
+        print(f"  自动扫描间隔: {self.auto_discovery.scan_interval} 秒")
 
         # 获取系统信息推荐
         if PSUTIL_AVAILABLE:
@@ -1090,6 +1299,7 @@ class IntegratedUltraETLController:
         new_workers = input(f"新的线程数 (当前{self.max_workers}, 推荐2-8): ").strip()
         new_pool = input(f"新的连接池大小 (当前{self.connection_pool_size}, 推荐=线程数): ").strip()
         new_refresh = input(f"新的进度刷新间隔(分钟) (当前{self.progress_tracker.refresh_interval // 60}, 推荐1-5): ").strip()
+        new_scan_interval = input(f"新的自动扫描间隔(秒) (当前{self.auto_discovery.scan_interval}, 推荐180-600): ").strip()
 
         # 应用配置
         if new_batch.isdigit():
@@ -1115,6 +1325,13 @@ class IntegratedUltraETLController:
             refresh_minutes = max(1, min(30, int(new_refresh)))
             self.progress_tracker.refresh_interval = refresh_minutes * 60
             print(f"✅ 进度刷新间隔调整为: {refresh_minutes} 分钟")
+
+        if new_scan_interval.isdigit():
+            scan_interval = max(60, min(3600, int(new_scan_interval)))  # 1分钟到1小时
+            self.auto_discovery.scan_interval = scan_interval
+            print(f"✅ 自动扫描间隔调整为: {scan_interval} 秒")
+            if self.monitoring_enabled:
+                print("⚠️  自动监控正在运行，新设置将在下次扫描时生效")
 
     def _show_processing_status(self):
         """显示处理状态"""
@@ -1168,6 +1385,10 @@ class IntegratedUltraETLController:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # 停止自动监控线程
+        if hasattr(self, 'monitoring_enabled') and self.monitoring_enabled:
+            self.stop_auto_monitoring()
+
         self.cleanup()
 
 def main():

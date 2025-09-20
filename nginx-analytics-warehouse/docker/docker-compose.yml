@@ -1,6 +1,6 @@
 services:
   # ========== 核心数据存储(优先启动) ==========
-  
+
   # ClickHouse 数据库 - 修复网络连接问题
   clickhouse:
     image: clickhouse/clickhouse-server:24.3-alpine
@@ -50,7 +50,7 @@ services:
       retries: 3
 
   # ========== BI数据可视化工具 ==========
-  
+
   # Grafana 数据可视化
   grafana:
     image: grafana/grafana:latest
@@ -61,7 +61,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin123
-      GF_INSTALL_PLUGINS: vertamedia-clickhouse-datasource
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
     volumes:
       - ./data/grafana:/var/lib/grafana
       - ./services/grafana/dashboards:/etc/grafana/provisioning/dashboards
@@ -71,6 +71,12 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # PostgreSQL for Superset - 修复权限问题
   postgres:
@@ -118,9 +124,9 @@ services:
     networks:
       - nginx-analytics
     depends_on:
-      redis:
+      postgres:
         condition: service_healthy
-      clickhouse:
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8088/health || exit 1"]
@@ -130,7 +136,7 @@ services:
       start_period: 120s
 
   # ========== DataEase BI工具 v2.10.12 (安全版本) ==========
-  
+
   # DataEase MySQL数据库 v2.10.12
   dataease-mysql:
     image: registry.cn-qingdao.aliyuncs.com/dataease/mysql:8.4.5
@@ -158,7 +164,8 @@ services:
 
   # DataEase主服务 v2.10.12
   dataease:
-    image: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.10.12
+    #image: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.10.12
+    image: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.10.13
     container_name: nginx-analytics-dataease
     restart: unless-stopped
     ports:
@@ -183,7 +190,7 @@ services:
       start_period: 120s
 
   # ========== 夜莺监控栈 ==========
-  
+
   # MySQL for 夜莺元数据存储
   n9e-mysql:
     image: mysql:8
@@ -261,6 +268,12 @@ services:
     # 修复启动命令 - 使用环境变量指定配置目录
     command: >
       sh -c "/app/n9e"
+    healthcheck:
+      test: ["CMD", "pgrep", "n9e"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # Categraf 数据采集器
   categraf:
@@ -282,13 +295,238 @@ services:
     networks:
       - nginx-analytics
     depends_on:
-      - nightingale
+      nightingale:
+        condition: service_healthy
     privileged: true
     # 解决容器无法访问宿主机问题
     pid: host
 
+  # ========== ETL 数据处理引擎 ==========
+
+  # Spark Master - ETL计算引擎
+  spark-master:
+    image: apache/spark:3.5.1
+    container_name: nginx-analytics-spark-master
+    hostname: spark-master
+    restart: unless-stopped
+    ports:
+      - "8080:8080"  # Spark Master UI
+      - "7077:7077"  # Spark Master Port
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+      - TZ=Asia/Shanghai
+    volumes:
+      - spark_data:/opt/spark-data
+      - ./services/spark/conf:/opt/spark/conf
+      - ./services/seatunnel/jobs:/opt/seatunnel/jobs
+    networks:
+      - nginx-analytics
+    command: >
+      sh -c "/opt/spark/bin/spark-class org.apache.spark.deploy.master.Master"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Spark Worker - ETL计算节点
+  spark-worker:
+    image: apache/spark:3.5.1
+    container_name: nginx-analytics-spark-worker
+    hostname: spark-worker
+    restart: unless-stopped
+    ports:
+      - "8081:8081"  # Spark Worker UI
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+      - TZ=Asia/Shanghai
+    volumes:
+      - spark_data:/opt/spark-data
+      - ./services/spark/conf:/opt/spark/conf
+      - ./services/seatunnel/jobs:/opt/seatunnel/jobs
+    networks:
+      - nginx-analytics
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    command: >
+      sh -c "/opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Flink JobManager - 流处理引擎管理节点
+  flink-jobmanager:
+    image: flink:1.18-java11
+    container_name: nginx-analytics-flink-jobmanager
+    hostname: flink-jobmanager
+    restart: unless-stopped
+    ports:
+      - "8082:8081"  # Flink JobManager UI
+    environment:
+      - FLINK_PROPERTIES=jobmanager.rpc.address:flink-jobmanager
+      - TZ=Asia/Shanghai
+    volumes:
+      - flink_data:/opt/flink-data
+      - ./services/flink/conf:/opt/flink/conf
+      - ./services/seatunnel/jobs:/opt/seatunnel/jobs
+    networks:
+      - nginx-analytics
+    command: jobmanager
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Flink TaskManager - 流处理引擎工作节点
+  flink-taskmanager:
+    image: flink:1.18-java11
+    container_name: nginx-analytics-flink-taskmanager
+    hostname: flink-taskmanager
+    restart: unless-stopped
+    environment:
+      - FLINK_PROPERTIES=jobmanager.rpc.address:flink-jobmanager taskmanager.numberOfTaskSlots:2
+      - TZ=Asia/Shanghai
+    volumes:
+      - flink_data:/opt/flink-data
+      - ./services/flink/conf:/opt/flink/conf
+      - ./services/seatunnel/jobs:/opt/seatunnel/jobs
+    networks:
+      - nginx-analytics
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    command: taskmanager
+
+  # SeaTunnel Master - 数据集成平台主节点
+  seatunnel-master:
+    image: apache/seatunnel:latest
+    container_name: nginx-analytics-seatunnel-master
+    hostname: seatunnel-master
+    restart: unless-stopped
+    ports:
+      - "5801:5801"  # SeaTunnel Engine REST API
+    environment:
+      # 官方推荐的环境变量
+      - SEATUNNEL_HOME=/opt/seatunnel
+      - TZ=Asia/Shanghai
+      # 集群配置 - 按照官方文档
+      - ST_DOCKER_MEMBER_LIST=seatunnel-master:5801
+      # 计算引擎配置
+      - SPARK_HOME=/opt/spark
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - FLINK_HOME=/opt/flink
+      # 数据源连接配置
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DATABASE=nginx_analytics
+      - CLICKHOUSE_USER=analytics_user
+      - CLICKHOUSE_PASSWORD=analytics_password_change_in_prod
+    volumes:
+      # 挂载ETL作业配置文件
+      - ./services/seatunnel/jobs:/opt/seatunnel/jobs:ro
+      # 挂载数据源
+      - ../nginx_logs-a:/opt/data/nginx_logs:ro
+      # 挂载SeaTunnel数据目录
+      - seatunnel_data:/opt/seatunnel/data
+      - seatunnel_logs:/opt/seatunnel/logs
+      - ./services/seatunnel/config:/opt/seatunnel/config
+    networks:
+      - nginx-analytics
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      spark-master:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - |
+        echo "启动SeaTunnel Master节点..."
+        echo "环境变量: ST_DOCKER_MEMBER_LIST=$ST_DOCKER_MEMBER_LIST"
+
+        # 确保目录存在
+        mkdir -p /opt/seatunnel/logs /opt/seatunnel/data
+
+        # 等待依赖服务就绪
+        sleep 10
+
+        # 启动master节点 - 按照官方文档
+        cd /opt/seatunnel
+        exec ./bin/seatunnel-cluster.sh -r master
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5801/hazelcast/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ========== DolphinScheduler 3.3.1 Standalone模式 ==========
+
+  # DolphinScheduler Standalone - All-in-one 模式
+  dolphinscheduler-standalone:
+    image: apache/dolphinscheduler-standalone-server:3.3.1
+    container_name: nginx-analytics-dolphinscheduler
+    hostname: dolphinscheduler-standalone
+    restart: unless-stopped
+    ports:
+      - "12345:12345"  # DolphinScheduler Web UI
+    environment:
+      DATABASE_TYPE: h2
+      SPRING_PROFILES_ACTIVE: h2
+      TZ: Asia/Shanghai
+      # 资源存储配置
+      RESOURCE_STORAGE_TYPE: LOCAL
+      RESOURCE_UPLOAD_PATH: /opt/dolphinscheduler/resources
+      # SeaTunnel 集成配置
+      SEATUNNEL_HOME: /opt/seatunnel
+      # 数据源连接配置
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_DATABASE: nginx_analytics
+      CLICKHOUSE_USER: analytics_user
+      CLICKHOUSE_PASSWORD: analytics_password_change_in_prod
+    volumes:
+      - ds_standalone_data:/opt/dolphinscheduler
+      - ds_logs:/opt/dolphinscheduler/logs
+      # 挂载SeaTunnel相关目录用于ETL作业
+      - seatunnel_data:/opt/seatunnel/data:ro
+      - ./services/seatunnel/jobs:/opt/seatunnel/jobs:ro
+      # 挂载数据源文件
+      - ../nginx_logs-a:/opt/data/nginx_logs:ro
+    networks:
+      - nginx-analytics
+    depends_on:
+      seatunnel-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12345/dolphinscheduler/"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 300s
+
   # ========== 可选: 系统监控 ==========
-  
+
   # Prometheus Node Exporter - 系统指标收集
   node-exporter:
     image: prom/node-exporter:latest
@@ -320,15 +558,15 @@ volumes:
     driver: local
   redis_data:
     driver: local
-  
-  # BI工具数据卷  
+
+  # BI工具数据卷
   grafana_data:
     driver: local
   postgres_data:
     driver: local
   superset_data:
     driver: local
-  
+
   # DataEase v2.10.12数据卷
   dataease_mysql_data:
     driver: local
@@ -338,12 +576,27 @@ volumes:
     driver: local
   dataease_cache:
     driver: local
-  
-  
+
   # 夜莺监控数据卷
   n9e_mysql_data:
     driver: local
   victoriametrics_data:
     driver: local
   n9e_data:
+    driver: local
+
+  # ETL数据处理引擎数据卷
+  spark_data:
+    driver: local
+  flink_data:
+    driver: local
+  seatunnel_data:
+    driver: local
+  seatunnel_logs:
+    driver: local
+
+  # DolphinScheduler Standalone数据卷
+  ds_standalone_data:
+    driver: local
+  ds_logs:
     driver: local

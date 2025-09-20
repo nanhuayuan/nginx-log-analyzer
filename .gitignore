@@ -102,7 +102,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+# .env  # Docker需要这个文件，不忽略
 .venv
 env/
 venv/
@@ -179,6 +179,12 @@ Nginx日志下载需求.txt
 /nginx-analytics-warehouse/processors/processed_logs_complete.json
 /nginx-analytics-warehouse/volumes/
 /nginx-analytics-warehouse/nul
-/nginx-analytics-warehouse/dataease/db/
-/nginx-analytics-warehouse/n9e/
-/nginx-analytics-warehouse/docker/dataease/db/
+
+# Docker数据目录 - 忽略运行时数据，保留配置文件
+/nginx-analytics-warehouse/docker/data/
+!/nginx-analytics-warehouse/docker/services/
+!/nginx-analytics-warehouse/docker/*.env
+!/nginx-analytics-warehouse/docker/*.yml
+!/nginx-analytics-warehouse/docker/*.yaml
+!/nginx-analytics-warehouse/docker/*.sh
+!/nginx-analytics-warehouse/docker/*.md

@@ -1,0 +1,151 @@
+# Categraf配置文件
+# 用于系统监控指标采集
+
+[global]
+# 全局配置
+hostname = ""
+omit_hostname = false
+precision = "s"
+interval = 15
+providers = ["local"]
+
+[writer_opt]
+# 数据写入配置
+batch = 2000
+chan_size = 10000
+
+[[writers]]
+# 写入到本地N9E
+url = "http://nightingale:17000/prometheus/v1/write"
+basic_auth_user = ""
+basic_auth_pass = ""
+timeout = 5000
+dial_timeout = 2500
+max_idle_conns_per_host = 100
+
+[heartbeat]
+# 心跳配置
+enable = true
+url = "http://nightingale:17000/v1/n9e/heartbeat"
+interval = 10
+timeout = 3000
+
+[http]
+# HTTP服务配置
+enable = false
+address = ":9100"
+print_access = false
+
+[log]
+# 日志配置
+file_name = "stdout"
+level = "INFO"
+days = 7
+max_size = 100
+max_backups = 5
+
+# ========== 输入插件配置 ==========
+
+[[instances]]
+# 系统基础监控
+plugin = "system"
+interval = 15
+
+[[instances]]
+# CPU监控
+plugin = "cpu"
+interval = 15
+percpu = false
+totalcpu = true
+collect_cpu_time = false
+report_active = false
+
+[[instances]]
+# 内存监控
+plugin = "mem"
+interval = 15
+
+[[instances]]
+# 磁盘监控
+plugin = "disk"
+interval = 15
+mount_points = ["/"]
+
+[[instances]]
+# 磁盘IO监控
+plugin = "diskio"
+interval = 15
+
+[[instances]]
+# 网络接口监控
+plugin = "net"
+interval = 15
+interfaces = ["eth0", "ens*", "enp*"]
+
+[[instances]]
+# 网络连接监控
+plugin = "netstat"
+interval = 15
+
+[[instances]]
+# 进程监控
+plugin = "processes"
+interval = 15
+
+[[instances]]
+# 内核监控
+plugin = "kernel"
+interval = 15
+
+[[instances]]
+# 内核虚拟内存统计
+plugin = "kernel_vmstat"
+interval = 15
+
+[[instances]]
+# 负载监控
+plugin = "linux_sysctl_fs"
+interval = 15
+
+# Docker容器监控（如果需要）
+[[instances]]
+plugin = "docker"
+interval = 15
+endpoint = "unix:///var/run/docker.sock"
+gather_services = false
+container_names = []
+container_name_include = []
+container_name_exclude = []
+timeout = "5s"
+perdevice = true
+total = false
+
+# MySQL监控（连接到本地MySQL）
+[[instances]]
+plugin = "mysql"
+interval = 15
+address = "root:1234@tcp(n9e-mysql:3306)/"
+timeout = "3s"
+extra_status_metrics = true
+extra_innodb_metrics = true
+gather_process_list = false
+gather_user_statistics = false
+gather_info_schema_auto_inc = false
+gather_innodb_metrics = false
+gather_slave_status = false
+gather_binary_logs = false
+gather_table_io_waits = false
+gather_table_lock_waits = false
+gather_index_io_waits = false
+gather_event_waits = false
+gather_file_events_stats = false
+gather_perf_events_statements = false
+
+# Redis监控（连接到本地Redis）
+[[instances]]
+plugin = "redis"
+interval = 15
+address = "redis:6379"
+username = ""
+password = "redis_password"
+pool_size = 2
