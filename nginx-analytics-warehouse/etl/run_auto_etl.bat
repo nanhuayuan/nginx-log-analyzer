@@ -17,6 +17,7 @@ echo 日志文件: %LOG_FILE%
 echo ========================================
 
 REM 启动自动监控模式，运行2小时（7200秒）
+call conda activate py39
 python controllers\integrated_ultra_etl_controller.py --auto-monitor --monitor-duration 7200 --batch-size 3000 --workers 6 --refresh-minutes 2 > "%LOG_FILE%" 2>&1
 
 echo ========================================

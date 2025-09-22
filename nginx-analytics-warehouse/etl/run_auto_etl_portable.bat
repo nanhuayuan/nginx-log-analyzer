@@ -10,6 +10,7 @@ cd /d "%~dp0"
 echo 当前工作目录: %CD%
 
 REM 检查Python环境
+call conda activate py39
 python --version >nul 2>&1
 if errorlevel 1 (
     echo ❌ 错误: 未找到Python环境
