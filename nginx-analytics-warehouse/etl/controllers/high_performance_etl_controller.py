@@ -29,6 +29,9 @@ current_dir = Path(__file__).parent
 etl_root = current_dir.parent
 sys.path.append(str(etl_root))
 
+# 导入动态批大小优化器
+from utils.dynamic_batch_optimizer import DynamicBatchOptimizer, BatchSizeRecommendation
+
 from parsers.base_log_parser import BaseLogParser
 from processors.field_mapper import FieldMapper
 from writers.dwd_writer import DWDWriter
@@ -39,8 +42,8 @@ class HighPerformanceETLController:
     def __init__(self,
                  base_log_dir: str = None,
                  state_file: str = None,
-                 batch_size: int = 2000,        # 可配置批处理大小
-                 max_workers: int = 4,          # 可配置线程数
+                 batch_size: int = 25000,       # 可配置批处理大小
+                 max_workers: int = 6,          # 可配置线程数
                  connection_pool_size: int = None,  # 可配置连接池大小
                  memory_limit_mb: int = 512,    # 内存限制
                  enable_detailed_logging: bool = True):  # 详细日志开关
@@ -61,11 +64,21 @@ class HighPerformanceETLController:
             Path(etl_root / "processed_logs_state.json")
 
         # 性能配置 - 可调优参数
+        self.initial_batch_size = batch_size
         self.batch_size = batch_size
         self.max_workers = max_workers
         self.connection_pool_size = connection_pool_size if connection_pool_size is not None else max_workers
         self.memory_limit_mb = memory_limit_mb
         self.enable_detailed_logging = enable_detailed_logging
+
+        # 初始化动态批大小优化器
+        self.batch_optimizer = DynamicBatchOptimizer(
+            initial_batch_size=batch_size,
+            min_batch_size=max(1000, batch_size // 10),
+            max_batch_size=min(100000, batch_size * 4),
+            memory_threshold=0.8,
+            cpu_threshold=0.9
+        )
 
         # 日志配置
         import logging
@@ -586,11 +599,28 @@ class HighPerformanceETLController:
                                 mega_batch.append(mapped_data)
                                 file_records += 1
 
-                                # 高效批量写入检查 - 使用优化的缓冲写入
-                                if len(mega_batch) >= self.batch_size:
+                                # 动态批量写入检查 - 使用动态优化的批大小
+                                current_batch_size = self.batch_optimizer.get_current_batch_size()
+                                if len(mega_batch) >= current_batch_size:
                                     if not test_mode:
+                                        # 记录批处理性能开始时间
+                                        batch_start_time = time.time()
+
                                         # 使用优化的缓冲写入系统
                                         self._add_to_write_buffer(mega_batch.copy())
+
+                                        # 记录批处理性能
+                                        batch_duration = time.time() - batch_start_time
+                                        self.batch_optimizer.record_batch_performance(
+                                            current_batch_size,
+                                            len(mega_batch),
+                                            batch_duration
+                                        )
+
+                                        # 尝试优化批大小
+                                        new_batch_size, reason = self.batch_optimizer.optimize_batch_size()
+                                        if new_batch_size != current_batch_size:
+                                            self.logger.info(f"🔧 批大小优化: {current_batch_size} -> {new_batch_size}, 原因: {reason}")
 
                                     mega_batch.clear()
                                     gc.collect()  # 内存优化
@@ -892,10 +922,26 @@ class HighPerformanceETLController:
         print("=" * 80)
 
         print(f"⚙️  配置信息:")
-        print(f"   批处理大小: {self.batch_size:,} (可调优)")
+        print(f"   初始批处理大小: {self.initial_batch_size:,}")
+        print(f"   当前批处理大小: {self.batch_optimizer.get_current_batch_size():,} (动态优化)")
         print(f"   最大工作线程: {self.max_workers} (可调优)")
         print(f"   连接池大小: {self.connection_pool_size} (可调优)")
         print(f"   详细日志: {'启用' if self.enable_detailed_logging else '禁用'}")
+
+        # 显示动态批大小优化器统计
+        optimizer_stats = self.batch_optimizer.get_performance_stats()
+        if optimizer_stats:
+            print(f"\n🔧  动态批大小优化统计:")
+            print(f"   测量次数: {optimizer_stats.get('total_measurements', 0)}")
+            print(f"   平均吞吐量: {optimizer_stats.get('avg_throughput', 0):.1f} 记录/秒")
+            print(f"   峰值吞吐量: {optimizer_stats.get('max_throughput', 0):.1f} 记录/秒")
+            print(f"   连续良好性能: {optimizer_stats.get('consecutive_good_performance', 0)}")
+            print(f"   连续不佳性能: {optimizer_stats.get('consecutive_bad_performance', 0)}")
+
+            if 'avg_memory_usage' in optimizer_stats:
+                print(f"   平均内存使用: {optimizer_stats['avg_memory_usage']*100:.1f}%")
+            if 'avg_cpu_usage' in optimizer_stats:
+                print(f"   平均CPU使用: {optimizer_stats['avg_cpu_usage']*100:.1f}%")
 
         print(f"\n📈 缓存统计:")
         print(f"   User-Agent缓存: {len(self.ua_cache)} 项")
@@ -1004,6 +1050,111 @@ class HighPerformanceETLController:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.cleanup()
 
+    def _dynamic_batch_optimization_menu(self):
+        """动态批大小优化管理菜单"""
+        while True:
+            print("\n" + "=" * 80)
+            print("🔧 动态批大小优化管理")
+            print("=" * 80)
+
+            # 显示当前状态
+            current_batch_size = self.batch_optimizer.get_current_batch_size()
+            optimizer_stats = self.batch_optimizer.get_performance_stats()
+
+            print(f"📊 当前状态:")
+            print(f"   初始批大小: {self.initial_batch_size:,}")
+            print(f"   当前批大小: {current_batch_size:,}")
+            print(f"   测量次数: {optimizer_stats.get('total_measurements', 0)}")
+
+            if optimizer_stats.get('avg_throughput', 0) > 0:
+                print(f"   平均吞吐量: {optimizer_stats['avg_throughput']:.1f} 记录/秒")
+                print(f"   峰值吞吐量: {optimizer_stats['max_throughput']:.1f} 记录/秒")
+
+            print(f"\n📋 管理选项:")
+            print("1. 📈 查看详细优化统计")
+            print("2. 🔄 手动触发优化")
+            print("3. 🎯 强制设置批大小")
+            print("4. 🔄 重置优化器")
+            print("5. 💡 获取系统推荐批大小")
+            print("0. 🔙 返回主菜单")
+
+            try:
+                choice = input("请选择操作 [0-5]: ").strip()
+
+                if choice == '0':
+                    break
+
+                elif choice == '1':
+                    # 显示详细统计
+                    print("\n📈 详细优化统计:")
+                    for key, value in optimizer_stats.items():
+                        if isinstance(value, float):
+                            if 'usage' in key:
+                                print(f"   {key}: {value*100:.1f}%")
+                            else:
+                                print(f"   {key}: {value:.2f}")
+                        else:
+                            print(f"   {key}: {value}")
+
+                elif choice == '2':
+                    # 手动触发优化
+                    print("\n🔄 手动触发批大小优化...")
+                    new_size, reason = self.batch_optimizer.optimize_batch_size()
+                    print(f"优化结果: {current_batch_size} -> {new_size}")
+                    print(f"优化原因: {reason}")
+
+                elif choice == '3':
+                    # 强制设置批大小
+                    new_size_input = input(f"请输入新的批大小 (当前 {current_batch_size}): ").strip()
+                    if new_size_input.isdigit():
+                        new_size = int(new_size_input)
+                        if 1000 <= new_size <= 100000:
+                            self.batch_optimizer.force_batch_size(new_size)
+                            print(f"✅ 已强制设置批大小为: {new_size:,}")
+                        else:
+                            print("❌ 批大小必须在 1,000 - 100,000 范围内")
+                    else:
+                        print("❌ 请输入有效数字")
+
+                elif choice == '4':
+                    # 重置优化器
+                    confirm = input("确认重置优化器？这将清除所有性能历史 (y/N): ").strip().lower()
+                    if confirm == 'y':
+                        self.batch_optimizer.reset_optimizer()
+                        print("✅ 优化器已重置")
+                    else:
+                        print("❌ 已取消重置")
+
+                elif choice == '5':
+                    # 系统推荐
+                    print("\n💡 系统推荐批大小:")
+                    system_info = BatchSizeRecommendation.get_system_info()
+
+                    if 'error' not in system_info:
+                        recommended_size = BatchSizeRecommendation.recommend_initial_batch_size(
+                            system_info['available_memory_gb']
+                        )
+                        print(f"   可用内存: {system_info['available_memory_gb']:.1f} GB")
+                        print(f"   CPU核心数: {system_info['cpu_count']}")
+                        print(f"   推荐批大小: {recommended_size:,}")
+
+                        apply = input("是否应用推荐的批大小？ (y/N): ").strip().lower()
+                        if apply == 'y':
+                            self.batch_optimizer.force_batch_size(recommended_size)
+                            print(f"✅ 已应用推荐批大小: {recommended_size:,}")
+                    else:
+                        print(f"❌ 无法获取系统信息: {system_info['error']}")
+
+                else:
+                    print("❌ 无效选择")
+
+                input("\n按回车键继续...")
+
+            except KeyboardInterrupt:
+                break
+            except Exception as e:
+                print(f"❌ 操作失败: {e}")
+
     # === 交互式配置菜单 ===
 
     def interactive_menu(self):
@@ -1018,12 +1169,14 @@ class HighPerformanceETLController:
             print("4. 🧪 测试模式处理")
             print("5. ⚙️ 性能参数调优")
             print("6. 🔍 查看详细错误日志")
+            print("7. 🔧 动态批大小优化管理")
             print("0. 👋 退出")
             print("-" * 80)
-            print(f"📊 当前配置: 批量{self.batch_size} | 线程{self.max_workers} | 连接池{self.connection_pool_size}")
+            current_batch_size = self.batch_optimizer.get_current_batch_size()
+            print(f"📊 当前配置: 批量{current_batch_size} (动态) | 线程{self.max_workers} | 连接池{self.connection_pool_size}")
 
             try:
-                choice = input("请选择操作 [0-6]: ").strip()
+                choice = input("请选择操作 [0-7]: ").strip()
 
                 if choice == '0':
                     print("👋 再见！")
@@ -1102,6 +1255,9 @@ class HighPerformanceETLController:
                 elif choice == '6':
                     self.print_detailed_error_log()
 
+                elif choice == '7':
+                    self._dynamic_batch_optimization_menu()
+
                 else:
                     print("❌ 无效选择")
 
@@ -1138,7 +1294,7 @@ def main():
     parser.add_argument('--test', action='store_true', help='测试模式')
     parser.add_argument('--limit', type=int, help='每个文件的行数限制')
     parser.add_argument('--batch-size', type=int, default=2000, help='批处理大小 (可调优)')
-    parser.add_argument('--workers', type=int, default=4, help='工作线程数 (可调优)')
+    parser.add_argument('--workers', type=int, default=6, help='工作线程数 (可调优)')
     parser.add_argument('--pool-size', type=int, help='连接池大小 (可调优，默认=线程数)')
     parser.add_argument('--detailed-logging', action='store_true', default=True, help='启用详细错误日志')
 

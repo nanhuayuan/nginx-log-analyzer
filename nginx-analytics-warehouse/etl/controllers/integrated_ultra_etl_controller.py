@@ -381,9 +381,14 @@ class IntegratedUltraETLController:
         Args:
             progress_refresh_minutes: 进度刷新间隔(分钟) 1-5分钟
         """
-        # 基础配置 (完全兼容原有)
-        self.base_log_dir = Path(base_log_dir) if base_log_dir else \
-            Path("D:/project/nginx-log-analyzer/nginx-analytics-warehouse/nginx_logs")
+        # 基础配置 (完全兼容原有) - 使用相对路径
+        if base_log_dir:
+            self.base_log_dir = Path(base_log_dir)
+        else:
+            # 自动检测nginx_logs目录位置
+            etl_root_parent = etl_root.parent  # nginx-analytics-warehouse
+            default_log_dir = etl_root_parent / "nginx_logs"
+            self.base_log_dir = default_log_dir
         self.state_file = Path(state_file) if state_file else \
             Path(etl_root / "processed_logs_state.json")
 
@@ -1083,9 +1088,9 @@ class IntegratedUltraETLController:
             for file_path in new_files:
                 try:
                     # 使用原有的处理逻辑
-                    result = self._process_single_file(file_path, test_mode=False)
+                    result = self.process_single_file(file_path, 0, test_mode=False)
                     if result['success'] and not result.get('skipped', False):
-                        total_records += result['records']
+                        total_records += result.get('records_processed', 0)
                         processed_files += 1
                     elif not result['success']:
                         errors.append(f"{file_path}: {result.get('error', 'Unknown error')}")
@@ -1414,6 +1419,8 @@ def main():
     parser.add_argument('--pool-size', type=int, help='连接池大小')
     parser.add_argument('--detailed-logging', action='store_true', default=True, help='启用详细错误日志')
     parser.add_argument('--refresh-minutes', type=int, default=3, help='进度刷新间隔(分钟)')
+    parser.add_argument('--auto-monitor', action='store_true', help='启动自动监控模式（非交互式）')
+    parser.add_argument('--monitor-duration', type=int, default=7200, help='自动监控持续时间（秒），默认2小时')
 
     args = parser.parse_args()
 
@@ -1425,6 +1432,46 @@ def main():
             enable_detailed_logging=args.detailed_logging,
             progress_refresh_minutes=args.refresh_minutes
         ) as controller:
+
+            # 自动监控模式（非交互式）
+            if args.auto_monitor:
+                print(f"🤖 启动自动监控模式，持续时间: {args.monitor_duration}秒")
+
+                # 首先处理所有未处理的日志
+                print("📋 首先处理所有未处理的日志...")
+                result = controller.process_all_parallel(test_mode=args.test, limit=args.limit)
+                if result['success'] and result.get('total_records', 0) > 0:
+                    print(f"✅ 初始处理完成: {result['total_records']:,} 记录")
+                else:
+                    print("📝 没有发现未处理的文件")
+
+                # 启动自动监控
+                controller.start_auto_monitoring()
+
+                try:
+                    start_time = time.time()
+                    print(f"🔍 自动监控中... 将运行 {args.monitor_duration} 秒")
+
+                    while time.time() - start_time < args.monitor_duration:
+                        remaining = args.monitor_duration - (time.time() - start_time)
+                        print(f"⏰ 剩余监控时间: {remaining:.0f} 秒", end='\\r')
+                        time.sleep(30)  # 每30秒显示一次剩余时间
+
+                        # 检查是否有新文件被处理
+                        if controller.monitoring_enabled:
+                            continue
+                        else:
+                            print("\\n⚠️ 监控线程已停止，退出自动监控模式")
+                            break
+
+                    print(f"\\n✅ 自动监控完成，运行了 {time.time() - start_time:.0f} 秒")
+
+                except KeyboardInterrupt:
+                    print("\\n👋 用户中断自动监控")
+                finally:
+                    controller.stop_auto_monitoring()
+
+                return
 
             # 如果没有参数，显示交互式菜单
             if not any([args.date, args.all]):

@@ -32,7 +32,7 @@ class HighPerformanceDWDWriter:
                  username: str = 'default',
                  password: str = '',
                  insert_block_size: int = 50000,      # 每次插入的块大小
-                 max_insert_threads: int = 2,         # 并发插入线程数
+                 max_insert_threads: int = 6,         # 并发插入线程数
                  connection_timeout: int = 30,        # 连接超时
                  retry_attempts: int = 3):            # 重试次数
         """
@@ -500,7 +500,7 @@ if __name__ == "__main__":
     
     writer = HighPerformanceDWDWriter(
         insert_block_size=10000,
-        max_insert_threads=4
+        max_insert_threads=6
     )
     
     # 测试连接
