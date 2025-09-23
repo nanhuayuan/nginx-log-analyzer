@@ -1,4 +1,5 @@
 @echo off
+setlocal EnableDelayedExpansion
 chcp 65001
 echo ========================================
 echo Nginx日志ETL自动处理系统 (便携版)
@@ -26,6 +27,42 @@ if not exist "controllers\integrated_ultra_etl_controller.py" (
     echo 当前目录: %CD%
     pause
     exit /b 1
+)
+
+REM 快速检查关键依赖
+echo ⚙️ 检查关键依赖...
+python -c "import clickhouse_connect" 2>nul
+if errorlevel 1 (
+    echo ❌ 错误: 缺少关键依赖 clickhouse_connect
+    echo.
+    echo 解决方案:
+    echo 1. 运行依赖安装脚本: check_and_install_dependencies.bat
+    echo 2. 或者手动安装: pip install clickhouse_connect
+    echo.
+    set /p auto_install="是否自动安装依赖？(Y/n): "
+    if /i "!auto_install!"=="y" (
+        echo 正在安装 clickhouse_connect...
+        pip install clickhouse_connect
+        if errorlevel 1 (
+            echo ❌ 安装失败，请手动安装
+            pause
+            exit /b 1
+        )
+        echo ✅ 依赖安装成功
+    ) else if /i "!auto_install!"=="" (
+        echo 正在安装 clickhouse_connect...
+        pip install clickhouse_connect
+        if errorlevel 1 (
+            echo ❌ 安装失败，请手动安装
+            pause
+            exit /b 1
+        )
+        echo ✅ 依赖安装成功
+    ) else (
+        echo 请先安装依赖后再运行
+        pause
+        exit /b 1
+    )
 )
 
 REM 自动检测nginx_logs目录
