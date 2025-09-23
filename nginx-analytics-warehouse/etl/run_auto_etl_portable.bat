@@ -58,30 +58,50 @@ echo 🚀 启动ETL处理...
 echo 执行命令: %ETL_CMD%
 echo ========================================
 
-REM 执行ETL处理并记录日志
-%ETL_CMD% > "%LOG_FILE%" 2>&1
+echo.
+echo 🚀 开始ETL处理，实时输出进度...
+echo 📝 同时将日志保存到: %LOG_FILE%
+echo ========================================
+echo.
 
-REM 检查执行结果
+REM 创建一个临时脚本来实现双重输出（控制台+文件）
+set TEMP_SCRIPT=%TEMP%\etl_dual_output.bat
+echo @echo off > "%TEMP_SCRIPT%"
+echo %ETL_CMD% 2^>^&1 ^| tee "%LOG_FILE%" >> "%TEMP_SCRIPT%"
+
+REM 检查是否有tee命令，如果没有则使用PowerShell实现
+where tee >nul 2>&1
 if errorlevel 1 (
-    echo ❌ ETL处理过程中出现错误
-    echo 请查看日志文件: %LOG_FILE%
+    echo 使用PowerShell实现双重输出...
+    REM 使用PowerShell实现tee功能
+    powershell -Command "& {%ETL_CMD% 2>&1 | Tee-Object -FilePath '%LOG_FILE%'}"
+    set ETL_EXIT_CODE=%errorlevel%
 ) else (
-    echo ✅ ETL处理完成
+    echo 使用tee命令实现双重输出...
+    REM 如果系统有tee命令，直接使用
+    call "%TEMP_SCRIPT%"
+    set ETL_EXIT_CODE=%errorlevel%
 )
 
+REM 清理临时文件
+if exist "%TEMP_SCRIPT%" del "%TEMP_SCRIPT%"
+
+echo.
 echo ========================================
 echo ETL处理完成时间: %date% %time%
-echo 详细日志位置: %LOG_FILE%
-echo ========================================
+echo 退出代码: %ETL_EXIT_CODE%
 
-REM 显示最后几行日志（如果存在）
-if exist "%LOG_FILE%" (
-    echo.
-    echo 📋 最后几行日志:
-    echo ----------------------------------------
-    more +0 "%LOG_FILE%" | findstr /E /C:"✅" /C:"❌" /C:"处理完成" /C:"ERROR" /C:"成功"
-    echo ----------------------------------------
+REM 检查执行结果
+if %ETL_EXIT_CODE% equ 0 (
+    echo ✅ ETL处理成功完成！
+) else (
+    echo ❌ ETL处理出现错误，退出代码: %ETL_EXIT_CODE%
+    echo 请检查上方的错误信息和日志文件
 )
 
-REM 保持窗口打开以查看结果
-timeout /t 10
+echo 📝 详细日志已保存到: %LOG_FILE%
+echo ========================================
+
+echo.
+echo 按任意键退出...
+pause >nul
