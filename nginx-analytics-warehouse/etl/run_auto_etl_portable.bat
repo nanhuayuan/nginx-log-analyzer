@@ -140,5 +140,5 @@ echo 📝 详细日志已保存到: %LOG_FILE%
 echo ========================================
 
 echo.
-echo 按任意键退出...
+echo Press any key to exit...
 pause >nul
