@@ -41,22 +41,41 @@ set LOG_FILE=%LOG_DIR%\etl_auto_%date:~0,4%%date:~5,2%%date:~8,2%_%time:~0,2%%ti
 echo 日志文件: %LOG_FILE%
 echo ========================================
 
-REM 启动自动监控模式，运行2小时（7200秒）
-python controllers\integrated_ultra_etl_controller.py --auto-monitor --monitor-duration 7200 --batch-size 3000 --workers 6 --refresh-minutes 2
+REM 记录开始信息到日志文件
+echo ======================================== > "%LOG_FILE%"
+echo Nginx日志ETL自动处理系统 >> "%LOG_FILE%"
+echo 启动时间: %date% %time% >> "%LOG_FILE%"
+echo 工作目录: %cd% >> "%LOG_FILE%"
+echo ======================================== >> "%LOG_FILE%"
+echo. >> "%LOG_FILE%"
+
+REM 启动自动监控模式，运行2小时（7200秒），同时输出到控制台和文件
+python controllers\integrated_ultra_etl_controller.py --auto-monitor --monitor-duration 7200 --batch-size 3000 --workers 6 --refresh-minutes 2 2>&1 | powershell -Command "$input | ForEach-Object { Write-Host $_; Add-Content -Path '%LOG_FILE%' -Value $_ -Encoding UTF8 }"
+set ETL_EXIT_CODE=%errorlevel%
 
 echo.
 echo ========================================
 echo ETL处理完成时间: %date% %time%
 echo 退出代码: %ETL_EXIT_CODE%
 
+REM 记录结束信息到日志文件
+echo. >> "%LOG_FILE%"
+echo ======================================== >> "%LOG_FILE%"
+echo ETL处理完成时间: %date% %time% >> "%LOG_FILE%"
+echo 退出代码: %ETL_EXIT_CODE% >> "%LOG_FILE%"
+
 REM 检查执行结果
 if %ETL_EXIT_CODE% equ 0 (
     echo ✅ ETL处理成功完成！
+    echo ✅ ETL处理成功完成！ >> "%LOG_FILE%"
 ) else (
     echo ❌ ETL处理出现错误，退出代码: %ETL_EXIT_CODE%
-    echo 请检查上方的错误信息和日志文件
+    echo ❌ ETL处理出现错误，退出代码: %ETL_EXIT_CODE% >> "%LOG_FILE%"
 )
 
+echo ======================================== >> "%LOG_FILE%"
+
+echo.
 echo 📝 详细日志已保存到: %LOG_FILE%
 echo ========================================
 
