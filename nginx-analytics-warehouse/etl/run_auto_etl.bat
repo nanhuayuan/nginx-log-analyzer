@@ -22,7 +22,6 @@ python controllers\integrated_ultra_etl_controller.py --auto-monitor --monitor-d
 
 echo ========================================
 echo ETL处理完成时间: %date% %time%
-echo 详细日志请查看: %LOG_FILE%
 echo ========================================
 
 echo.

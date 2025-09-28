@@ -258,7 +258,7 @@ if __name__ == "__main__":
     parser = BaseLogParser()
     
     # 测试单行解析
-    test_line = '''http_host:zgtapp.zwfw.gxzf.gov.cn remote_addr:"100.100.8.44" remote_port:"10305"  remote_user:"-"  time:"2025-04-23T00:00:02+08:00"  request:"GET /group1/M00/06/B3/rBAWN2f-ZIKAJI2vAAIkLKrgt-I560.png HTTP/1.1"  code:"200"  body:"140332"  http_referer:"-"  ar_time:"0.325"  RealIp:"100.100.8.44"  agent:"zgt-ios/1.4.1 (iPhone; iOS 15.4.1; Scale/3.00)"'''
+    test_line = '''http_host:xxx.xxxx.xxxx.gov.cn remote_addr:"100.100.8.44" remote_port:"10305"  remote_user:"-"  time:"2025-04-23T00:00:02+08:00"  request:"GET /abc/M00/06/B3/rBAWN2f-87181789179-I560.png HTTP/1.1"  code:"200"  body:"140332"  http_referer:"-"  ar_time:"0.325"  RealIp:"100.1.8.44"  agent:"zzz-ios/1.4.1 (iPhone; iOS 15.4.1; Scale/3.00)"'''
     
     result = parser.parse_line(test_line, 1, 'test.log')
     if result:
