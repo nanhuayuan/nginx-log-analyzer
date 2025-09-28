@@ -40,3 +40,7 @@ uvicorn==0.31.0
 
 # Monitoring
 prometheus-client==0.21.0
+
+maxminddb==2.5.2            # MaxMind数据库
+lru-cache==0.1.0            # 缓存优化
+validators==0.22.0          # URL/IP验证
