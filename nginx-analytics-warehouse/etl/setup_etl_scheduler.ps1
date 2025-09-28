@@ -11,24 +11,14 @@ if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 
 # 获取脚本所在目录
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$batchScript = Join-Path $scriptPath "run_auto_etl_portable.bat"  # 使用便携版脚本
+$batchScript = Join-Path $scriptPath "run_auto_etl.bat"
 
 # 检查文件是否存在
-# 检查两种脚本文件
-$portableBatch = Join-Path $scriptPath "run_auto_etl_portable.bat"
-$originalBatch = Join-Path $scriptPath "run_auto_etl.bat"
-
-if (Test-Path $portableBatch) {
-    $batchScript = $portableBatch
-    Write-Host "使用便携版脚本: run_auto_etl_portable.bat" -ForegroundColor Green
-} elseif (Test-Path $originalBatch) {
-    $batchScript = $originalBatch
-    Write-Host "使用原版脚本: run_auto_etl.bat" -ForegroundColor Yellow
+if (Test-Path $batchScript) {
+    Write-Host "使用ETL脚本: run_auto_etl.bat" -ForegroundColor Green
 } else {
-    Write-Host "未找到批处理脚本文件" -ForegroundColor Red
-    Write-Host "请确保以下文件之一存在:" -ForegroundColor Yellow
-    Write-Host "  - run_auto_etl_portable.bat (推荐)" -ForegroundColor White
-    Write-Host "  - run_auto_etl.bat" -ForegroundColor White
+    Write-Host "未找到批处理脚本文件: run_auto_etl.bat" -ForegroundColor Red
+    Write-Host "请确保文件存在于: $batchScript" -ForegroundColor Yellow
     Read-Host "按Enter键退出"
     exit 1
 }
