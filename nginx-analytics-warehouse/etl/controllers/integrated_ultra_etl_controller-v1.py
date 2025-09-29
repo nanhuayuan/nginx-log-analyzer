@@ -37,16 +37,22 @@ sys.path.append(str(etl_root))
 from parsers.base_log_parser import BaseLogParser
 # ========== FieldMapper选择 ==========
 # 方案一：使用增强版 (推荐) - 包含政务应用识别和性能监控
-# from processors.enhanced_field_mapper_with_monitoring import EnhancedFieldMapperWithMonitoring as FieldMapper
 from processors.enhanced_field_mapper_v2 import EnhancedFieldMapperV2 as FieldMapper
 
 # 方案二：使用兼容性包装器 - 保持原有接口
 # from processors.field_mapper_enhanced import FieldMapper
 
 # 方案三：使用原版 (当前)
-#from processors.field_mapper import FieldMapper
+# from processors.field_mapper import FieldMapper
 # =====================================
 from writers.dwd_writer import DWDWriter
+
+# 导入性能优化组件
+try:
+    from utils.dynamic_batch_optimizer import DynamicBatchOptimizer, BatchSizeRecommendation
+    BATCH_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    BATCH_OPTIMIZER_AVAILABLE = False
 
 # 尝试导入可选依赖
 try:
@@ -379,7 +385,7 @@ class IntegratedUltraETLController:
     def __init__(self,
                  base_log_dir: str = None,
                  state_file: str = None,
-                 batch_size: int = 2000,
+                 batch_size: int = 10000,  # 基于性能测试确定的最优值
                  max_workers: int = 4,
                  connection_pool_size: int = None,
                  memory_limit_mb: int = 512,
@@ -403,11 +409,32 @@ class IntegratedUltraETLController:
             Path(etl_root / "processed_logs_state.json")
 
         # 性能配置
+        self.initial_batch_size = batch_size
         self.batch_size = batch_size
         self.max_workers = max_workers
         self.connection_pool_size = connection_pool_size if connection_pool_size is not None else max_workers
         self.memory_limit_mb = memory_limit_mb
         self.enable_detailed_logging = enable_detailed_logging
+
+        # 初始化动态批大小优化器（基于性能测试的最优参数）
+        if BATCH_OPTIMIZER_AVAILABLE:
+            self.batch_optimizer = DynamicBatchOptimizer(
+                initial_batch_size=15000,  # 基于测试发现的最优值
+                min_batch_size=5000,       # 提高最小值以保证性能
+                max_batch_size=50000,      # 合理的最大值
+                memory_threshold=0.85,     # 适当提高内存阈值
+                cpu_threshold=0.9,
+                optimization_window=5      # 缩短优化窗口，更快响应
+            )
+        else:
+            self.batch_optimizer = None
+
+        # 异步写入缓冲系统配置（基于最优性能参数）
+        self.enable_async_writes = True  # 启用异步写入
+        self.write_buffer_size = 30000  # 使用优化的缓冲区大小
+        self.delayed_commit_seconds = 0.3  # 缩短延迟时间，提高响应性
+        self.enable_batch_aggregation = True  # 启用批量聚合
+        self.max_concurrent_writes = max(3, max_workers // 2)  # 增加并发写入数
 
         # 日志配置
         self.logger = self._setup_logger()
@@ -421,10 +448,11 @@ class IntegratedUltraETLController:
         self.mapper_pool = [FieldMapper(geoip_db_path=str(etl_root / "data" / "GeoLite2-City.mmdb")) for _ in range(max_workers)]
         self.writer_pool = []
 
-        # 优化的缓存机制 (解决性能衰减)
+        # 线程安全的缓存机制 (解决性能衰减问题)
         self.ua_cache = {}
         self.uri_cache = {}
         self.cache_stats = {'ua_hits': 0, 'ua_misses': 0, 'uri_hits': 0, 'uri_misses': 0}
+        self.cache_lock = threading.Lock()  # 缓存线程安全锁
 
         # 处理状态 (兼容原有格式)
         self.processed_state = self.load_state()
@@ -515,50 +543,66 @@ class IntegratedUltraETLController:
             self.writer_pool.append(writer)
 
     def cached_ua_parse(self, user_agent: str, mapper: FieldMapper) -> Dict:
-        """优化的缓存用户代理解析"""
-        if user_agent in self.ua_cache:
-            self.cache_stats['ua_hits'] += 1
-            return self.ua_cache[user_agent]
+        """线程安全的缓存用户代理解析"""
+        if not user_agent:
+            return {'browser': 'Unknown', 'os': 'Unknown'}
 
-        self.cache_stats['ua_misses'] += 1
+        # 线程安全的缓存检查
+        with self.cache_lock:
+            if user_agent in self.ua_cache:
+                self.cache_stats['ua_hits'] += 1
+                return self.ua_cache[user_agent]
 
-        # 执行解析
+            self.cache_stats['ua_misses'] += 1
+
+        # 执行解析（在锁外进行以减少竞争）
         try:
             parsed = mapper._parse_user_agent_enhanced(user_agent)
         except:
             parsed = {'browser': 'Unknown', 'os': 'Unknown'}
 
-        # 缓存管理 (防止内存膨胀) - 更积极的清理
-        if len(self.ua_cache) > 3000:  # 降低阈值，更频繁清理
-            cache_size = self.performance_optimizer.optimize_cache(self.ua_cache, 3000)
-            if self.enable_detailed_logging:
-                self.logger.info(f"🧹 UA缓存优化完成，当前大小: {cache_size}")
+        # 线程安全的缓存更新
+        with self.cache_lock:
+            # 缓存管理 (防止内存膨胀) - 更积极的清理
+            if len(self.ua_cache) > 3000:  # 降低阈值，更频繁清理
+                cache_size = self.performance_optimizer.optimize_cache(self.ua_cache, 3000)
+                if self.enable_detailed_logging:
+                    self.logger.info(f"🧹 UA缓存优化完成，当前大小: {cache_size}")
 
-        self.ua_cache[user_agent] = parsed
+            self.ua_cache[user_agent] = parsed
+
         return parsed
 
     def cached_uri_parse(self, uri: str, mapper: FieldMapper) -> Dict:
-        """优化的缓存URI解析"""
-        if uri in self.uri_cache:
-            self.cache_stats['uri_hits'] += 1
-            return self.uri_cache[uri]
+        """线程安全的缓存URI解析"""
+        if not uri:
+            return {'path': '', 'query_count': 0}
 
-        self.cache_stats['uri_misses'] += 1
+        # 线程安全的缓存检查
+        with self.cache_lock:
+            if uri in self.uri_cache:
+                self.cache_stats['uri_hits'] += 1
+                return self.uri_cache[uri]
 
-        # 执行解析
+            self.cache_stats['uri_misses'] += 1
+
+        # 执行解析（在锁外进行以减少竞争）
         try:
             parsed = mapper._parse_uri_components(uri)
         except:
             parsed = {'path': uri, 'query_count': 0}
 
-        # 缓存管理 - 优化清理策略
-        if len(self.uri_cache) > 3000:  # 降低阈值
-            # 保留最常用的缓存
-            items = list(self.uri_cache.items())
-            self.uri_cache.clear()
-            self.uri_cache.update(items[-1500:])  # 保留更少项目
+        # 线程安全的缓存更新
+        with self.cache_lock:
+            # 缓存管理 - 优化清理策略
+            if len(self.uri_cache) > 3000:  # 降低阈值
+                # 保留最常用的缓存
+                items = list(self.uri_cache.items())
+                self.uri_cache.clear()
+                self.uri_cache.update(items[-1500:])  # 保留更少项目
 
-        self.uri_cache[uri] = parsed
+            self.uri_cache[uri] = parsed
+
         return parsed
 
     def process_file_batch(self, file_paths: List[Path], thread_id: int,
@@ -605,6 +649,15 @@ class IntegratedUltraETLController:
 
         # 开始文件处理追踪
         self.progress_tracker.start_file_processing(thread_id, file_path, estimated_lines)
+
+        # 动态批大小优化 (在文件开始时进行)
+        if self.batch_optimizer and self.batch_optimizer.should_optimize():
+            new_batch_size, reason = self.batch_optimizer.optimize_batch_size()
+            if new_batch_size != self.batch_size:
+                old_batch_size = self.batch_size
+                self.batch_size = new_batch_size
+                if self.enable_detailed_logging:
+                    self.logger.info(f"🔧 [线程{thread_id}] 动态调整批大小: {old_batch_size} -> {self.batch_size}, 原因: {reason}")
 
         try:
             # 获取组件
@@ -664,14 +717,19 @@ class IntegratedUltraETLController:
                             batch.append(mapped_data)
                             file_records += 1
 
-                            # 批量写入 - 增加异步处理
+                            # 批量写入 - 使用优化的动态批大小
                             if len(batch) >= self.batch_size:
                                 if not test_mode and writer:
                                     try:
                                         write_start = time.time()
 
-                                        # 使用更高效的写入方式
-                                        result = writer.write_batch_optimized(batch)  # 使用优化版本
+                                        # 尝试使用优化的写入方式
+                                        try:
+                                            result = writer.write_batch_optimized(batch)  # 使用优化版本
+                                        except AttributeError:
+                                            # 如果没有优化方法，使用标准方法
+                                            result = writer.write_batch(batch)
+
                                         write_time = time.time() - write_start
 
                                         # 检查写入结果
@@ -681,34 +739,38 @@ class IntegratedUltraETLController:
                                             self.write_stats['total_records'] += len(batch)
                                             self.write_stats['total_write_time'] += write_time
 
-                                            # 更新实时统计 (新增)
+                                            # 更新实时统计
                                             self.progress_tracker.update_batch_written(len(batch))
 
                                             # 记录性能指标
                                             current_speed = len(batch) / write_time if write_time > 0 else 0
                                             self.performance_optimizer.monitor_performance(current_speed)
 
+                                            # 为动态批大小优化器记录性能数据
+                                            if self.batch_optimizer:
+                                                memory_used = None
+                                                if PSUTIL_AVAILABLE:
+                                                    try:
+                                                        memory_used = psutil.virtual_memory().used / (1024 * 1024)  # MB
+                                                    except:
+                                                        pass
+
+                                                self.batch_optimizer.record_batch_performance(
+                                                    batch_size=len(batch),
+                                                    records_count=len(batch),
+                                                    duration=write_time,
+                                                    memory_used_mb=memory_used
+                                                )
+
                                             if self.enable_detailed_logging:
-                                                self.logger.info(f"✅ [线程{thread_id}] 批次写入成功: {len(batch)} 条记录, {write_time:.2f}秒")
+                                                self.logger.info(f"✅ [线程{thread_id}] 批次写入成功: {len(batch)} 条记录, {write_time:.2f}秒, {current_speed:.0f} RPS")
                                         else:
                                             self.logger.error(f"写入返回失败结果: {result}")
                                             raise Exception("写入失败")
 
                                     except Exception as e:
-                                        # 如果优化方法失败，回退到普通方法
-                                        try:
-                                            self.logger.warning(f"优化写入失败，回退到标准方法: {e}")
-                                            result = writer.write_batch(batch)
-                                            if result and result.get('success', False):
-                                                self.write_stats['total_writes'] += 1
-                                                self.write_stats['total_records'] += len(batch)
-                                                # 更新实时统计
-                                                self.progress_tracker.update_batch_written(len(batch))
-                                            else:
-                                                raise Exception("标准写入也失败")
-                                        except Exception as e2:
-                                            self.logger.error(f"批量写入完全失败: {e2}")
-                                            file_errors += len(batch)  # 记录失败的记录数
+                                        self.logger.error(f"批量写入失败: {e}")
+                                        file_errors += len(batch)  # 记录失败的记录数
 
                                 batch.clear()
 
@@ -1098,9 +1160,9 @@ class IntegratedUltraETLController:
             for file_path in new_files:
                 try:
                     # 使用原有的处理逻辑
-                    result = self.process_single_file(file_path, 0, test_mode=False)
+                    result = self._process_single_file(file_path, test_mode=False)
                     if result['success'] and not result.get('skipped', False):
-                        total_records += result.get('records_processed', 0)
+                        total_records += result['records']
                         processed_files += 1
                     elif not result['success']:
                         errors.append(f"{file_path}: {result.get('error', 'Unknown error')}")
@@ -1424,7 +1486,7 @@ def main():
     parser.add_argument('--force', action='store_true', help='强制重新处理')
     parser.add_argument('--test', action='store_true', help='测试模式')
     parser.add_argument('--limit', type=int, help='每个文件的行数限制')
-    parser.add_argument('--batch-size', type=int, default=2000, help='批处理大小')
+    parser.add_argument('--batch-size', type=int, default=10000, help='批处理大小')
     parser.add_argument('--workers', type=int, default=4, help='工作线程数')
     parser.add_argument('--pool-size', type=int, help='连接池大小')
     parser.add_argument('--detailed-logging', action='store_true', default=True, help='启用详细错误日志')
@@ -1464,20 +1526,20 @@ def main():
 
                     while time.time() - start_time < args.monitor_duration:
                         remaining = args.monitor_duration - (time.time() - start_time)
-                        print(f"⏰ 剩余监控时间: {remaining:.0f} 秒", end='\\r')
+                        print(f"⏰ 剩余监控时间: {remaining:.0f} 秒", end='\r')
                         time.sleep(30)  # 每30秒显示一次剩余时间
 
                         # 检查是否有新文件被处理
                         if controller.monitoring_enabled:
                             continue
                         else:
-                            print("\\n⚠️ 监控线程已停止，退出自动监控模式")
+                            print("\n⚠️ 监控线程已停止，退出自动监控模式")
                             break
 
-                    print(f"\\n✅ 自动监控完成，运行了 {time.time() - start_time:.0f} 秒")
+                    print(f"\n✅ 自动监控完成，运行了 {time.time() - start_time:.0f} 秒")
 
                 except KeyboardInterrupt:
-                    print("\\n👋 用户中断自动监控")
+                    print("\n👋 用户中断自动监控")
                 finally:
                     controller.stop_auto_monitoring()
 

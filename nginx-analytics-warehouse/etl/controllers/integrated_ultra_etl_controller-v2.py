@@ -38,15 +38,21 @@ from parsers.base_log_parser import BaseLogParser
 # ========== FieldMapper选择 ==========
 # 方案一：使用增强版 (推荐) - 包含政务应用识别和性能监控
 # from processors.enhanced_field_mapper_with_monitoring import EnhancedFieldMapperWithMonitoring as FieldMapper
-from processors.enhanced_field_mapper_v2 import EnhancedFieldMapperV2 as FieldMapper
 
 # 方案二：使用兼容性包装器 - 保持原有接口
 # from processors.field_mapper_enhanced import FieldMapper
 
 # 方案三：使用原版 (当前)
-#from processors.field_mapper import FieldMapper
+from processors.field_mapper import FieldMapper
 # =====================================
 from writers.dwd_writer import DWDWriter
+
+# 导入性能优化组件
+try:
+    from utils.dynamic_batch_optimizer import DynamicBatchOptimizer, BatchSizeRecommendation
+    BATCH_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    BATCH_OPTIMIZER_AVAILABLE = False
 
 # 尝试导入可选依赖
 try:
@@ -326,8 +332,11 @@ class IntegratedProgressTracker:
 
         elapsed = current_time - self.session_stats['start_time']
 
-        # 计算平均速度 - 使用实时统计
-        total_records = self.real_time_stats['total_written_records']
+        # 计算平均速度 - 使用会话统计（兼容测试模式）
+        total_records = max(
+            self.real_time_stats['total_written_records'],  # 实际写入的记录数
+            self.session_stats['total_records_written']     # 会话统计的记录数
+        )
         if elapsed > 0:
             self.session_stats['avg_processing_speed'] = total_records / elapsed
 
@@ -379,8 +388,8 @@ class IntegratedUltraETLController:
     def __init__(self,
                  base_log_dir: str = None,
                  state_file: str = None,
-                 batch_size: int = 2000,
-                 max_workers: int = 4,
+                 batch_size: int = 10000,
+                 max_workers: int = 6,
                  connection_pool_size: int = None,
                  memory_limit_mb: int = 512,
                  enable_detailed_logging: bool = True,
@@ -403,11 +412,39 @@ class IntegratedUltraETLController:
             Path(etl_root / "processed_logs_state.json")
 
         # 性能配置
+        self.initial_batch_size = batch_size
         self.batch_size = batch_size
         self.max_workers = max_workers
         self.connection_pool_size = connection_pool_size if connection_pool_size is not None else max_workers
         self.memory_limit_mb = memory_limit_mb
         self.enable_detailed_logging = enable_detailed_logging
+
+        # 初始化动态批大小优化器（基于性能测试的最优参数）
+        if BATCH_OPTIMIZER_AVAILABLE:
+            self.batch_optimizer = DynamicBatchOptimizer(
+                initial_batch_size=15000,  # 基于测试发现的最优值
+                min_batch_size=5000,       # 提高最小值以保证性能
+                max_batch_size=50000,      # 合理的最大值
+                memory_threshold=0.85,     # 适当提高内存阈值
+                cpu_threshold=0.9,
+                optimization_window=5      # 缩短优化窗口，更快响应
+            )
+        else:
+            self.batch_optimizer = None
+
+        # 异步写入缓冲系统配置（基于最优性能参数）
+        self.enable_async_writes = True  # 启用异步写入
+        self.write_buffer_size = 30000  # 使用优化的缓冲区大小
+        self.delayed_commit_seconds = 0.3  # 缩短延迟时间，提高响应性
+        self.enable_batch_aggregation = True  # 启用批量聚合
+        self.max_concurrent_writes = max(3, max_workers // 2)  # 增加并发写入数
+
+        # 异步写入缓冲区和队列
+        self.write_buffer = []
+        self.write_buffer_lock = threading.Lock()
+        self.async_write_queue = queue.Queue(maxsize=100)
+        self.write_thread_pool = None
+        self.last_buffer_flush = time.time()
 
         # 日志配置
         self.logger = self._setup_logger()
@@ -454,6 +491,9 @@ class IntegratedUltraETLController:
         self.is_processing = False
         self.processing_lock = threading.Lock()
 
+        # 线程同步和控制
+        self.shutdown_event = threading.Event()
+
         # 初始化已知文件列表
         existing_files = set(Path(f) for f in self.processed_state.get('processed_files', {}))
         self.auto_discovery.initialize_known_files(existing_files)
@@ -489,6 +529,7 @@ class IntegratedUltraETLController:
 
         for i in range(self.connection_pool_size):
             try:
+                # 使用标准DWDWriter配合异步缓冲机制
                 writer = DWDWriter()
                 if writer.connect():
                     self.writer_pool.append(writer)
@@ -664,53 +705,31 @@ class IntegratedUltraETLController:
                             batch.append(mapped_data)
                             file_records += 1
 
-                            # 批量写入 - 增加异步处理
-                            if len(batch) >= self.batch_size:
-                                if not test_mode and writer:
-                                    try:
-                                        write_start = time.time()
+                            # Mega_batch 高性能批量聚合机制（移植自HighPerformanceETLController）
+                            current_batch_size = self.batch_optimizer.get_current_batch_size() if self.batch_optimizer else self.batch_size
+                            if len(batch) >= current_batch_size:
+                                if not test_mode:
+                                    # 记录批处理性能开始时间
+                                    batch_start_time = time.time()
 
-                                        # 使用更高效的写入方式
-                                        result = writer.write_batch_optimized(batch)  # 使用优化版本
-                                        write_time = time.time() - write_start
+                                    # 使用异步缓冲写入系统
+                                    self._add_to_write_buffer(batch.copy())
 
-                                        # 检查写入结果
-                                        if result and result.get('success', False):
-                                            # 更新写入统计
-                                            self.write_stats['total_writes'] += 1
-                                            self.write_stats['total_records'] += len(batch)
-                                            self.write_stats['total_write_time'] += write_time
+                                    # 记录批处理性能
+                                    batch_duration = time.time() - batch_start_time
+                                    if self.batch_optimizer:
+                                        self.batch_optimizer.record_batch_performance(
+                                            batch_size=len(batch),
+                                            records_count=len(batch),
+                                            duration=batch_duration
+                                        )
 
-                                            # 更新实时统计 (新增)
-                                            self.progress_tracker.update_batch_written(len(batch))
-
-                                            # 记录性能指标
-                                            current_speed = len(batch) / write_time if write_time > 0 else 0
-                                            self.performance_optimizer.monitor_performance(current_speed)
-
-                                            if self.enable_detailed_logging:
-                                                self.logger.info(f"✅ [线程{thread_id}] 批次写入成功: {len(batch)} 条记录, {write_time:.2f}秒")
-                                        else:
-                                            self.logger.error(f"写入返回失败结果: {result}")
-                                            raise Exception("写入失败")
-
-                                    except Exception as e:
-                                        # 如果优化方法失败，回退到普通方法
-                                        try:
-                                            self.logger.warning(f"优化写入失败，回退到标准方法: {e}")
-                                            result = writer.write_batch(batch)
-                                            if result and result.get('success', False):
-                                                self.write_stats['total_writes'] += 1
-                                                self.write_stats['total_records'] += len(batch)
-                                                # 更新实时统计
-                                                self.progress_tracker.update_batch_written(len(batch))
-                                            else:
-                                                raise Exception("标准写入也失败")
-                                        except Exception as e2:
-                                            self.logger.error(f"批量写入完全失败: {e2}")
-                                            file_errors += len(batch)  # 记录失败的记录数
+                                    if self.enable_detailed_logging:
+                                        current_speed = len(batch) / batch_duration if batch_duration > 0 else 0
+                                        self.logger.info(f"🚀 [线程{thread_id}] Mega批次提交: {len(batch)} 条记录, 速度: {current_speed:.0f} rec/s")
 
                                 batch.clear()
+                                gc.collect()  # 内存优化
 
                             # 检查限制
                             if limit and file_records >= limit:
@@ -721,18 +740,13 @@ class IntegratedUltraETLController:
                             if file_errors <= 5:
                                 self.logger.error(f"记录处理错误: {e}")
 
-                # 处理剩余批次
-                if batch and not test_mode and writer:
-                    try:
-                        result = writer.write_batch(batch)
-                        if result and result.get('success', False):
-                            self.write_stats['total_writes'] += 1
-                            self.write_stats['total_records'] += len(batch)
-                            # 更新实时统计
-                            self.progress_tracker.update_batch_written(len(batch))
-                    except Exception as e:
-                        self.logger.error(f"最终批量写入失败: {e}")
-                        file_errors += 1
+                # 处理剩余批次 - 使用异步缓冲写入系统
+                if batch and not test_mode:
+                    # 使用异步缓冲写入系统处理剩余数据
+                    self._add_to_write_buffer(batch)
+
+                    if self.enable_detailed_logging:
+                        self.logger.debug(f"🔄 [线程{thread_id}] 处理剩余批次: {len(batch)} 条记录")
 
             finally:
                 # 归还写入器
@@ -1098,9 +1112,9 @@ class IntegratedUltraETLController:
             for file_path in new_files:
                 try:
                     # 使用原有的处理逻辑
-                    result = self.process_single_file(file_path, 0, test_mode=False)
+                    result = self._process_single_file(file_path, test_mode=False)
                     if result['success'] and not result.get('skipped', False):
-                        total_records += result.get('records_processed', 0)
+                        total_records += result['records']
                         processed_files += 1
                     elif not result['success']:
                         errors.append(f"{file_path}: {result.get('error', 'Unknown error')}")
@@ -1124,6 +1138,34 @@ class IntegratedUltraETLController:
                     f"自动处理完成: {processed_files} 文件, {total_records:,} 记录, "
                     f"速度 {result['processing_speed']:.1f} rec/s"
                 )
+
+            # 强制刷新写入缓冲区以确保所有数据都被写入
+            if not test_mode:
+                try:
+                    self._flush_write_buffer(force=True)
+                    if self.enable_detailed_logging:
+                        self.logger.info("✅ 处理完成后强制刷新缓冲区")
+                except Exception as e:
+                    self.logger.error(f"❌ 强制刷新缓冲区失败: {e}")
+
+            # 动态批大小优化总结
+            if self.batch_optimizer:
+                final_batch_size = self.batch_optimizer.get_current_batch_size()
+                recommendations = self.batch_optimizer.get_recommendations()
+
+                self.logger.info(f"📊 动态批大小优化总结:")
+                self.logger.info(f"   初始批大小: {self.batch_size:,}")
+                self.logger.info(f"   最终批大小: {final_batch_size:,}")
+
+                if recommendations:
+                    self.logger.info(f"   优化建议: {recommendations}")
+
+                # 添加优化信息到结果中
+                result['batch_optimization'] = {
+                    'initial_batch_size': self.batch_size,
+                    'final_batch_size': final_batch_size,
+                    'recommendations': recommendations
+                }
 
             return result
 
@@ -1304,14 +1346,14 @@ class IntegratedUltraETLController:
                 print(f"  CPU核心数: {cpu_count}")
                 print(f"  总内存: {memory_gb:.1f}GB")
                 print(f"\\n📊 推荐配置:")
-                print(f"  推荐线程数: {min(cpu_count, 8)}")
+                print(f"  推荐线程数: {min(max(cpu_count, 6), 8)}")
                 print(f"  推荐批量大小: {min(4000, int(memory_gb * 500))}")
             except:
                 pass
 
         # 交互式配置
         new_batch = input(f"\\n新的批量大小 (当前{self.batch_size}, 推荐1000-5000): ").strip()
-        new_workers = input(f"新的线程数 (当前{self.max_workers}, 推荐2-8): ").strip()
+        new_workers = input(f"新的线程数 (当前{self.max_workers}, 推荐4-8): ").strip()
         new_pool = input(f"新的连接池大小 (当前{self.connection_pool_size}, 推荐=线程数): ").strip()
         new_refresh = input(f"新的进度刷新间隔(分钟) (当前{self.progress_tracker.refresh_interval // 60}, 推荐1-5): ").strip()
         new_scan_interval = input(f"新的自动扫描间隔(秒) (当前{self.auto_discovery.scan_interval}, 推荐180-600): ").strip()
@@ -1376,9 +1418,169 @@ class IntegratedUltraETLController:
 
             print(f"  {file_name}: {record_count:,} 条记录, {speed:.0f} RPS, {processed_at}")
 
+    def _start_async_write_threads(self):
+        """启动异步写入线程池（移植自HighPerformanceETLController）"""
+        if self.enable_async_writes:
+            self.write_thread_pool = ThreadPoolExecutor(
+                max_workers=self.max_concurrent_writes,
+                thread_name_prefix="AsyncWriter"
+            )
+
+            # 为异步写入线程创建专用写入器池（关键优化）
+            self.async_writer_pool = []
+            for i in range(self.max_concurrent_writes):
+                try:
+                    async_writer = DWDWriter()
+                    if async_writer.connect():
+                        self.async_writer_pool.append(async_writer)
+                        if self.enable_detailed_logging:
+                            self.logger.info(f"✅ 异步写入器 {i+1} 连接成功")
+                    else:
+                        self.logger.error(f"❌ 异步写入器 {i+1} 连接失败")
+                except Exception as e:
+                    self.logger.error(f"❌ 创建异步写入器 {i+1} 失败: {e}")
+
+            if self.enable_detailed_logging:
+                self.logger.info(f"🚀 异步写入线程池已启动: {self.max_concurrent_writes} 个线程, {len(self.async_writer_pool)} 个专用写入器")
+
+    def _stop_async_write_threads(self):
+        """停止异步写入线程池"""
+        if self.write_thread_pool:
+            self.write_thread_pool.shutdown(wait=True)
+            self.write_thread_pool = None
+            if self.enable_detailed_logging:
+                self.logger.info("🛑 异步写入线程池已停止")
+
+    def _add_to_write_buffer(self, data_batch: List[Dict[str, Any]]):
+        """添加数据到写入缓冲区（移植自HighPerformanceETLController）"""
+        if not data_batch:
+            return
+        with self.write_buffer_lock:
+            self.write_buffer.extend(data_batch)
+        # 检查是否需要刷新缓冲区
+        self._flush_write_buffer()
+
+    def _flush_write_buffer(self, force: bool = False):
+        """刷新写入缓冲区（移植自HighPerformanceETLController）"""
+        with self.write_buffer_lock:
+            current_time = time.time()
+            should_flush = (
+                force or
+                len(self.write_buffer) >= self.write_buffer_size or
+                (self.write_buffer and
+                 current_time - self.last_buffer_flush > self.delayed_commit_seconds)
+            )
+
+            if should_flush and self.write_buffer:
+                buffer_to_flush = self.write_buffer.copy()
+                self.write_buffer.clear()
+                self.last_buffer_flush = current_time
+                self.write_stats['buffer_flushes'] = self.write_stats.get('buffer_flushes', 0) + 1
+
+                # 异步提交写入
+                if (self.enable_async_writes and
+                    self.write_thread_pool and
+                    not self.shutdown_event.is_set()):
+
+                    # 提交到异步线程池
+                    future = self.write_thread_pool.submit(self._async_write_batch, buffer_to_flush)
+                    return future
+                else:
+                    # 同步写入（回退模式）
+                    return self._sync_write_batch(buffer_to_flush)
+        return None
+
+    def _async_write_batch(self, batch: List[Dict[str, Any]]) -> bool:
+        """异步批量写入（移植自HighPerformanceETLController）"""
+        if not batch:
+            return True
+
+        try:
+            # 使用专用异步写入器池（关键修复）
+            if not hasattr(self, 'async_writer_pool') or not self.async_writer_pool:
+                self.logger.error("❌ 异步写入器池未初始化")
+                return False
+
+            # 从专用异步写入器池中获取写入器（避免线程冲突）
+            writer_index = threading.current_thread().ident % len(self.async_writer_pool)
+            writer = self.async_writer_pool[writer_index]
+
+            start_time = time.time()
+            result = writer.write_batch_optimized(batch)
+            write_time = time.time() - start_time
+
+            if result and result.get('success', False):
+                # 更新统计
+                with self.write_buffer_lock:
+                    self.write_stats['total_writes'] += 1
+                    self.write_stats['total_records'] += len(batch)
+                    self.write_stats['total_write_time'] += write_time
+                    self.write_stats['async_writes'] = self.write_stats.get('async_writes', 0) + 1
+
+                # 更新进度跟踪器统计
+                self.progress_tracker.update_batch_written(len(batch))
+
+                # 性能反馈
+                if self.batch_optimizer:
+                    self.batch_optimizer.record_batch_performance(
+                        batch_size=len(batch),
+                        records_count=len(batch),
+                        duration=write_time
+                    )
+
+                if self.enable_detailed_logging:
+                    current_speed = len(batch) / write_time if write_time > 0 else 0
+                    self.logger.debug(f"✅ 异步写入成功: {len(batch)} 条记录, {current_speed:.0f} rec/s")
+
+                return True
+            else:
+                self.logger.error(f"❌ 异步写入失败: {result}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"❌ 异步写入异常: {e}")
+            return False
+
+    def _sync_write_batch(self, batch: List[Dict[str, Any]]) -> bool:
+        """同步批量写入（回退模式）"""
+        if not batch:
+            return True
+
+        try:
+            writer = self.writer_pool[0]  # 使用第一个写入器
+
+            start_time = time.time()
+            result = writer.write_batch_optimized(batch)
+            write_time = time.time() - start_time
+
+            if result and result.get('success', False):
+                self.write_stats['total_writes'] += 1
+                self.write_stats['total_records'] += len(batch)
+                self.write_stats['total_write_time'] += write_time
+
+                # 更新进度跟踪器统计
+                self.progress_tracker.update_batch_written(len(batch))
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            self.logger.error(f"❌ 同步写入异常: {e}")
+            return False
+
     def cleanup(self):
         """清理资源"""
         self.logger.info("🧹 开始清理资源...")
+
+        # 刷新并停止异步写入
+        try:
+            self._flush_write_buffer(force=True)
+            self.logger.info("✅ 写入缓冲区已刷新")
+        except Exception as e:
+            self.logger.error(f"❌ 刷新写入缓冲区失败: {e}")
+
+        # 停止异步写入线程池
+        self._stop_async_write_threads()
 
         # 保存最终状态
         self.save_state()
@@ -1390,13 +1592,30 @@ class IntegratedUltraETLController:
             except Exception as e:
                 self.logger.warning(f"关闭数据库连接失败: {e}")
 
-        # 清理缓存
+        # 清理缓存和缓冲区
         self.ua_cache.clear()
         self.uri_cache.clear()
+        self.write_buffer.clear()
+
+        # 显示异步写入统计
+        if self.write_stats.get('total_writes', 0) > 0:
+            total_writes = self.write_stats['total_writes']
+            total_records = self.write_stats['total_records']
+            total_time = self.write_stats['total_write_time']
+            buffer_flushes = self.write_stats.get('buffer_flushes', 0)
+            avg_write_speed = total_records / total_time if total_time > 0 else 0
+
+            self.logger.info(f"📊 异步写入统计:")
+            self.logger.info(f"   总写入次数: {total_writes:,}")
+            self.logger.info(f"   总记录数: {total_records:,}")
+            self.logger.info(f"   缓冲区刷新次数: {buffer_flushes:,}")
+            self.logger.info(f"   平均写入速度: {avg_write_speed:.0f} rec/s")
 
         self.logger.info("✅ 资源清理完成")
 
     def __enter__(self):
+        # 启动异步写入线程池
+        self._start_async_write_threads()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -1425,7 +1644,7 @@ def main():
     parser.add_argument('--test', action='store_true', help='测试模式')
     parser.add_argument('--limit', type=int, help='每个文件的行数限制')
     parser.add_argument('--batch-size', type=int, default=2000, help='批处理大小')
-    parser.add_argument('--workers', type=int, default=4, help='工作线程数')
+    parser.add_argument('--workers', type=int, default=6, help='工作线程数')
     parser.add_argument('--pool-size', type=int, help='连接池大小')
     parser.add_argument('--detailed-logging', action='store_true', default=True, help='启用详细错误日志')
     parser.add_argument('--refresh-minutes', type=int, default=3, help='进度刷新间隔(分钟)')
@@ -1464,20 +1683,20 @@ def main():
 
                     while time.time() - start_time < args.monitor_duration:
                         remaining = args.monitor_duration - (time.time() - start_time)
-                        print(f"⏰ 剩余监控时间: {remaining:.0f} 秒", end='\\r')
+                        print(f"⏰ 剩余监控时间: {remaining:.0f} 秒", end='\r')
                         time.sleep(30)  # 每30秒显示一次剩余时间
 
                         # 检查是否有新文件被处理
                         if controller.monitoring_enabled:
                             continue
                         else:
-                            print("\\n⚠️ 监控线程已停止，退出自动监控模式")
+                            print("\n⚠️ 监控线程已停止，退出自动监控模式")
                             break
 
-                    print(f"\\n✅ 自动监控完成，运行了 {time.time() - start_time:.0f} 秒")
+                    print(f"\n✅ 自动监控完成，运行了 {time.time() - start_time:.0f} 秒")
 
                 except KeyboardInterrupt:
-                    print("\\n👋 用户中断自动监控")
+                    print("\n👋 用户中断自动监控")
                 finally:
                     controller.stop_auto_monitoring()
 
