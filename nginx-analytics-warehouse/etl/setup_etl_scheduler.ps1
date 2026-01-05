@@ -1,4 +1,4 @@
-# ETL自动调度任务设置脚本
+﻿# ETL自动调度任务设置脚本
 # 每天凌晨1:30启动nginx日志ETL处理
 
 # 检查管理员权限
@@ -35,7 +35,10 @@ $description = "自动处理nginx日志ETL - 每天凌晨1:30执行"
 try {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     Write-Host "已删除现有任务" -ForegroundColor Yellow
-} catch {}
+}
+catch {
+    # 忽略错误
+}
 
 # 创建触发器 - 每天凌晨1:30执行
 $trigger = New-ScheduledTaskTrigger -Daily -At "01:30AM"
@@ -54,7 +57,8 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 try {
     Register-ScheduledTask -TaskName $taskName -Description $description -Trigger $trigger -Action $action -Principal $principal -Settings $settings
     Write-Host "定时任务创建成功!" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Host "创建定时任务失败: $_" -ForegroundColor Red
     Read-Host "按Enter键退出"
     exit 1
@@ -67,7 +71,7 @@ Write-Host "任务名称: $taskName" -ForegroundColor Cyan
 Write-Host "执行时间: 每天凌晨1:30" -ForegroundColor Cyan
 Write-Host "运行用户: $currentUser" -ForegroundColor Cyan
 Write-Host "执行时长: 2小时自动监控 + 最多3小时超时保护" -ForegroundColor Cyan
-Write-Host "日志位置: $scriptPath\logs\" -ForegroundColor Cyan
+Write-Host "日志位置: $scriptPath\logs" -ForegroundColor Cyan
 Write-Host "===========================================" -ForegroundColor Green
 
 # 显示管理说明
@@ -103,7 +107,8 @@ if ($testRun -eq 'y' -or $testRun -eq 'Y') {
         $task = Get-ScheduledTask -TaskName $taskName
         Write-Host "当前任务状态: $($task.State)" -ForegroundColor Cyan
 
-    } catch {
+    }
+    catch {
         Write-Host "启动任务失败: $_" -ForegroundColor Red
     }
 }

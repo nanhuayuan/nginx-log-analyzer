@@ -1,0 +1,3 @@
+@echo off
+echo Requesting administrator privileges...
+powershell -Command "Start-Process PowerShell -ArgumentList '-ExecutionPolicy Bypass -File "%~dp0setup_task_new.ps1"' -Verb RunAs"
