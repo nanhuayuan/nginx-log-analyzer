@@ -55,6 +55,40 @@ try:
 except ImportError:
     PSUTIL_AVAILABLE = False
 
+# 安全打印函数 - 处理 Windows 控制台编码问题
+import platform
+import builtins
+
+# 保存原始 print 函数
+_original_print = builtins.print
+
+def safe_print(*args, **kwargs):
+    """安全打印函数，自动处理编码错误"""
+    try:
+        _original_print(*args, **kwargs)
+    except UnicodeEncodeError:
+        # 如果遇到编码错误，移除 emoji 和特殊字符
+        message = ' '.join(str(arg) for arg in args)
+        # 移除所有 emoji（Unicode > 0xFFFF）
+        safe_message = ''.join(
+            char if ord(char) < 0x10000 else '[EMOJI]'
+            for char in message
+        )
+        _original_print(safe_message, **kwargs)
+    except Exception as e:
+        # 最后的保护：如果还是失败，输出 ASCII 版本
+        try:
+            message = ' '.join(str(arg) for arg in args)
+            ascii_message = message.encode('ascii', errors='replace').decode('ascii')
+            _original_print(ascii_message, **kwargs)
+        except:
+            # 完全失败时的最后防线
+            _original_print("[OUTPUT ERROR]", **kwargs)
+
+# 替换内置 print（仅在 Windows 上）
+if platform.system() == 'Windows':
+    builtins.print = safe_print
+
 class AutoFileDiscovery:
     """自动文件发现器"""
 
