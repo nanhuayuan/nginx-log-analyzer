@@ -1,0 +1,110 @@
+# ==========================================
+# Redis Deployment - 缓存服务
+# 版本: redis:7-alpine
+# 固定节点: worker-148
+# ==========================================
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: nginx-analytics
+  labels:
+    app: redis
+spec:
+  type: LoadBalancer
+  ports:
+    - name: redis
+      port: 6380
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    app: redis
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: nginx-analytics
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      # 固定在worker-148节点
+      nodeSelector:
+        kubernetes.io/hostname: worker-148
+
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: redis
+          containerPort: 6379
+          protocol: TCP
+
+        # 启动命令 - 带密码认证
+        command:
+          - redis-server
+          - --appendonly
+          - "yes"
+          - --requirepass
+          - "$(REDIS_PASSWORD)"
+
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: redis-password
+        - name: TZ
+          value: "Asia/Shanghai"
+
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+
+        # 资源限制
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "2Gi"
+            cpu: "500m"
+
+        # 健康检查
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - redis-cli -a $REDIS_PASSWORD ping | grep PONG
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - redis-cli -a $REDIS_PASSWORD ping | grep PONG
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data-pvc

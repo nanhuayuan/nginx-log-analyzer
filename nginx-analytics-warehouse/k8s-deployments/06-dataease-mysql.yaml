@@ -1,0 +1,127 @@
+# ==========================================
+# DataEase MySQL StatefulSet - DataEase后端数据库
+# 版本: registry.cn-qingdao.aliyuncs.com/dataease/mysql:8.4.5
+# 固定节点: worker-148
+# ==========================================
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dataease-mysql-service
+  namespace: nginx-analytics
+  labels:
+    app: dataease-mysql
+spec:
+  type: ClusterIP
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+      protocol: TCP
+  selector:
+    app: dataease-mysql
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dataease-mysql
+  namespace: nginx-analytics
+  labels:
+    app: dataease-mysql
+spec:
+  serviceName: dataease-mysql-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dataease-mysql
+  template:
+    metadata:
+      labels:
+        app: dataease-mysql
+    spec:
+      # 固定在worker-148节点
+      nodeSelector:
+        kubernetes.io/hostname: worker-148
+
+      containers:
+      - name: mysql
+        image: registry.cn-qingdao.aliyuncs.com/dataease/mysql:8.4.5
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: mysql
+          containerPort: 3306
+          protocol: TCP
+
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: dataease-mysql-root-password
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: dataease-mysql-database
+        - name: TZ
+          value: "Asia/Shanghai"
+
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+        - name: mysql-config
+          mountPath: /etc/mysql/conf.d/my.cnf
+          subPath: my.cnf
+
+        # 资源限制
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+
+        # 健康检查
+        livenessProbe:
+          exec:
+            command:
+              - mysqladmin
+              - ping
+              - -h
+              - localhost
+              - -uroot
+              - -p$(MYSQL_ROOT_PASSWORD)
+              - --protocol
+              - tcp
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+        readinessProbe:
+          exec:
+            command:
+              - mysqladmin
+              - ping
+              - -h
+              - localhost
+              - -uroot
+              - -p$(MYSQL_ROOT_PASSWORD)
+              - --protocol
+              - tcp
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+      volumes:
+      - name: mysql-data
+        persistentVolumeClaim:
+          claimName: dataease-mysql-data-pvc
+      - name: mysql-config
+        configMap:
+          name: dataease-config
+          items:
+          - key: my.cnf
+            path: my.cnf

@@ -1,0 +1,243 @@
+# ==========================================
+# ClickHouse StatefulSet - 核心数据库
+# 版本: clickhouse/clickhouse-server:24.3-alpine
+# 固定节点: worker-148
+# ==========================================
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-service
+  namespace: nginx-analytics
+  labels:
+    app: clickhouse
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
+      protocol: TCP
+    - name: native
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+  selector:
+    app: clickhouse
+
+---
+# Headless Service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-headless
+  namespace: nginx-analytics
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 8123
+    - name: native
+      port: 9000
+  selector:
+    app: clickhouse
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: nginx-analytics
+  labels:
+    app: clickhouse
+spec:
+  serviceName: clickhouse-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+    spec:
+      # 固定在worker-148节点
+      nodeSelector:
+        kubernetes.io/hostname: worker-148
+
+      containers:
+      - name: clickhouse
+        image: clickhouse/clickhouse-server:24.3-alpine
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: http
+          containerPort: 8123
+          protocol: TCP
+        - name: native
+          containerPort: 9000
+          protocol: TCP
+
+        env:
+        - name: CLICKHOUSE_DB
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: clickhouse-database
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: clickhouse-user
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: clickhouse-password
+        - name: TZ
+          value: "Asia/Shanghai"
+
+        # 启动命令 - 配置监听地址
+        command:
+          - sh
+          - -c
+          - |
+            echo '<clickhouse><listen_host>0.0.0.0</listen_host><listen_host>::</listen_host></clickhouse>' > /etc/clickhouse-server/config.d/listen.xml
+            /entrypoint.sh
+
+        volumeMounts:
+        - name: clickhouse-data
+          mountPath: /var/lib/clickhouse
+        - name: clickhouse-logs
+          mountPath: /var/log/clickhouse-server
+
+        # 资源限制
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+
+        # 健康检查
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 8123
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 8123
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+      volumes:
+      - name: clickhouse-logs
+        emptyDir: {}
+
+  # VolumeClaimTemplates不使用，改用预创建的PVC
+  volumeClaimTemplates: []
+
+---
+# 手动挂载PVC (因为StatefulSet的volumeClaimTemplates不支持selector)
+# 我们需要修改StatefulSet的volumeMounts配置
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: nginx-analytics
+spec:
+  serviceName: clickhouse-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: worker-148
+
+      containers:
+      - name: clickhouse
+        image: clickhouse/clickhouse-server:24.3-alpine
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: http
+          containerPort: 8123
+        - name: native
+          containerPort: 9000
+
+        env:
+        - name: CLICKHOUSE_DB
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: clickhouse-database
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: clickhouse-user
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: clickhouse-password
+        - name: TZ
+          value: "Asia/Shanghai"
+
+        command:
+          - sh
+          - -c
+          - |
+            echo '<clickhouse><listen_host>0.0.0.0</listen_host><listen_host>::</listen_host></clickhouse>' > /etc/clickhouse-server/config.d/listen.xml
+            /entrypoint.sh
+
+        volumeMounts:
+        - name: clickhouse-data
+          mountPath: /var/lib/clickhouse
+        - name: clickhouse-logs
+          mountPath: /var/log/clickhouse-server
+
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 8123
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 8123
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+      volumes:
+      - name: clickhouse-data
+        persistentVolumeClaim:
+          claimName: clickhouse-data-pvc
+      - name: clickhouse-logs
+        emptyDir: {}

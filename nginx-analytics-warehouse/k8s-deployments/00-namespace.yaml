@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nginx-analytics
+  labels:
+    name: nginx-analytics
+    purpose: nginx-log-analysis
+    environment: production

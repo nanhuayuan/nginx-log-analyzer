@@ -1,0 +1,224 @@
+# ==========================================
+# PersistentVolumes - 使用hostPath固定在worker-148
+# 注意：WSL路径映射 D:\ -> /mnt/d/
+# ==========================================
+
+---
+# ClickHouse数据卷 - 50GB
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: clickhouse-data-pv
+  labels:
+    app: clickhouse
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /mnt/d/soft_work/k8s-data/clickhouse-data
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - worker-148
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clickhouse-data-pvc
+  namespace: nginx-analytics
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      app: clickhouse
+
+---
+# Redis数据卷 - 5GB
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-data-pv
+  labels:
+    app: redis
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /mnt/d/soft_work/k8s-data/redis-data
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - worker-148
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data-pvc
+  namespace: nginx-analytics
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      app: redis
+
+---
+# DataEase MySQL数据卷 - 10GB
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: dataease-mysql-data-pv
+  labels:
+    app: dataease-mysql
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /mnt/d/soft_work/k8s-data/dataease-mysql-data
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - worker-148
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dataease-mysql-data-pvc
+  namespace: nginx-analytics
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      app: dataease-mysql
+
+---
+# DataEase应用数据卷 - 10GB
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: dataease-data-pv
+  labels:
+    app: dataease
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /mnt/d/soft_work/k8s-data/dataease-data
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - worker-148
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dataease-data-pvc
+  namespace: nginx-analytics
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      app: dataease
+
+---
+# Grafana数据卷 - 2GB
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: grafana-data-pv
+  labels:
+    app: grafana
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /mnt/d/soft_work/k8s-data/grafana-data
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - worker-148
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data-pvc
+  namespace: nginx-analytics
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      app: grafana

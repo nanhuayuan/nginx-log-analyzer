@@ -1,0 +1,139 @@
+# ==========================================
+# DataEase Deployment - BI数据可视化平台
+# 版本: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.10.13
+# 固定节点: worker-148
+# ==========================================
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dataease-service
+  namespace: nginx-analytics
+  labels:
+    app: dataease
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 8810
+      targetPort: 8100
+      protocol: TCP
+  selector:
+    app: dataease
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dataease
+  namespace: nginx-analytics
+  labels:
+    app: dataease
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dataease
+  template:
+    metadata:
+      labels:
+        app: dataease
+    spec:
+      # 固定在worker-148节点
+      nodeSelector:
+        kubernetes.io/hostname: worker-148
+
+      # 等待MySQL就绪
+      initContainers:
+      - name: wait-for-mysql
+        image: busybox:1.35
+        command:
+          - sh
+          - -c
+          - |
+            until nc -z dataease-mysql-service 3306; do
+              echo "Waiting for MySQL..."
+              sleep 5
+            done
+            echo "MySQL is ready!"
+
+      containers:
+      - name: dataease
+        image: registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.10.13
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: http
+          containerPort: 8100
+          protocol: TCP
+
+        env:
+        - name: TZ
+          value: "Asia/Shanghai"
+        - name: MYSQL_HOST
+          value: "dataease-mysql-service"
+        - name: MYSQL_PORT
+          value: "3306"
+        - name: MYSQL_DB
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: dataease-mysql-database
+        - name: MYSQL_USER
+          value: "root"
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nginx-analytics-secrets
+              key: dataease-mysql-root-password
+
+        volumeMounts:
+        - name: dataease-data
+          mountPath: /opt/dataease2.0/data
+        - name: dataease-logs
+          mountPath: /opt/dataease2.0/logs
+        - name: dataease-cache
+          mountPath: /opt/dataease2.0/cache
+        - name: dataease-config
+          mountPath: /opt/apps/config
+          readOnly: true
+
+        # 资源限制
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+
+        # 健康检查
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8100
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8100
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+      volumes:
+      - name: dataease-data
+        persistentVolumeClaim:
+          claimName: dataease-data-pvc
+      - name: dataease-logs
+        emptyDir: {}
+      - name: dataease-cache
+        emptyDir: {}
+      - name: dataease-config
+        secret:
+          secretName: dataease-app-secret
