@@ -135,7 +135,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  CASE \n    WHEN error_rate < 1 AND avg_response_time < 500 THEN 95\n    WHEN error_rate < 2 AND avg_response_time < 1000 THEN 85\n    WHEN error_rate < 5 AND avg_response_time < 2000 THEN 75\n    WHEN error_rate < 10 AND avg_response_time < 5000 THEN 60\n    ELSE 40\n  END as health_score\nFROM (\n  SELECT \n    countIf(response_status_code != '200')*100.0/count(*) as error_rate,\n    avg(total_request_duration) as avg_response_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n)",
+          "rawSql": "SELECT \n  CASE \n    WHEN error_rate < 1 AND avg_response_time < 500 THEN 95\n    WHEN error_rate < 2 AND avg_response_time < 1000 THEN 85\n    WHEN error_rate < 5 AND avg_response_time < 2000 THEN 75\n    WHEN error_rate < 10 AND avg_response_time < 5000 THEN 60\n    ELSE 40\n  END as health_score\nFROM (\n  SELECT \n    countIf(response_status_class = '5xx') / count() * 100 as error_rate,\n    avg(total_request_duration) as avg_response_time\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n)",
           "refId": "A"
         }
       ],
@@ -329,7 +329,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT countIf(response_status_code != '200')*100.0/count(*) as error_rate \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)",
+          "rawSql": "SELECT countIf(response_status_class IN ('4xx', '5xx')) * 100.0 / count(*) as error_rate \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)",
           "refId": "A"
         }
       ],
@@ -399,7 +399,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  CASE \n    WHEN error_rate < 1 THEN 95\n    WHEN error_rate < 2 THEN 85\n    WHEN error_rate < 5 THEN 75\n    WHEN error_rate < 10 THEN 60\n    ELSE 40\n  END as quality_score \nFROM (\n  SELECT countIf(response_status_code != '200')*100.0/count(*) as error_rate\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n)",
+          "rawSql": "SELECT \n  CASE \n    WHEN error_rate < 1 THEN 95\n    WHEN error_rate < 2 THEN 85\n    WHEN error_rate < 5 THEN 75\n    WHEN error_rate < 10 THEN 60\n    ELSE 40\n  END as quality_score \nFROM (\n  SELECT countIf(response_status_class IN ('4xx', '5xx')) * 100.0 / count(*) as error_rate\n  FROM nginx_analytics.dwd_nginx_enriched_v3 \n  WHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\n)",
           "refId": "A"
         }
       ],
@@ -461,7 +461,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT count(*) as gov_requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \n  AND request_uri LIKE '%gov%'",
+          "rawSql": "SELECT count(*) as gov_requests \nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \n  AND referer_url LIKE '%gov%'",
           "refId": "A"
         }
       ],
@@ -819,7 +819,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "",
-          "rawSql": "SELECT \n  toStartOfInterval(log_time, INTERVAL 1 MINUTE) as time,\n  count()/60 as total_qps,\n  countIf(response_status_code = '200')/60 as success_qps,\n  countIf(request_uri LIKE '%gov%')/60 as gov_qps,\n  countIf(os_type = 'HarmonyOS')/60 as harmony_qps,\n  countIf(response_status_code = '200')*100.0/count() as success_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \nGROUP BY time \nORDER BY time",
+          "rawSql": "SELECT \n  toStartOfInterval(log_time, INTERVAL 1 MINUTE) as time,\n  count()/60 as total_qps,\n  countIf(response_status_code <= '500')/60 as success_qps,\n  countIf(request_uri LIKE '%gov%')/60 as gov_qps,\n  countIf(os_type = 'HarmonyOS')/60 as harmony_qps,\n  countIf(response_status_code <= '500')*100.0/count() as success_rate\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment) \nGROUP BY time \nORDER BY time",
           "refId": "A"
         }
       ],
@@ -1079,7 +1079,7 @@
             "uid": "${DS_CLICKHOUSE}"
           },
           "queryType": "table",
-          "rawSql": "SELECT \n  '系统性能' as \"检查项目\",\n  CASE \n    WHEN avg(total_request_duration) > 3000 THEN '严重'\n    WHEN avg(total_request_duration) > 1000 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('平均响应时间: ', toString(round(avg(total_request_duration))), 'ms') as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_api_performance_analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\nUNION ALL\nSELECT \n  '错误率监控' as \"检查项目\",\n  CASE \n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 10 THEN '严重'\n    WHEN (countIf(response_status_code != '200')*100.0/count(*)) > 2 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('错误率: ', toString(round(countIf(response_status_code != '200')*100.0/count(*), 2)), '%') as \"详细信息\",\n  countIf(response_status_code != '200') as \"请求总数\",\n  'nginx-interface-error-analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\nUNION ALL\nSELECT \n  '流量总览' as \"检查项目\",\n  '正常' as \"告警级别\",\n  concat('总请求数: ', toString(count(*))) as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_comprehensive_monitoring_fixed' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)",
+          "rawSql": "SELECT \n  '系统性能' as \"检查项目\",\n  CASE \n    WHEN avg(total_request_duration) > 3000 THEN '严重'\n    WHEN avg(total_request_duration) > 1000 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('平均响应时间: ', toString(round(avg(total_request_duration))), 'ms') as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_api_performance_analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\nUNION ALL\nSELECT \n  '错误率监控' as \"检查项目\",\n  CASE \n    WHEN (countIf(response_status_code >= '500')*100.0/count(*)) > 10 THEN '严重'\n    WHEN (countIf(response_status_code >= '500')*100.0/count(*)) > 2 THEN '警告'\n    ELSE '正常'\n  END as \"告警级别\",\n  concat('错误率: ', toString(round(countIf(response_status_code >= '500')*100.0/count(*), 2)), '%') as \"详细信息\",\n  countIf(response_status_code >= '500') as \"请求总数\",\n  'nginx-interface-error-analysis' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)\nUNION ALL\nSELECT \n  '流量总览' as \"检查项目\",\n  '正常' as \"告警级别\",\n  concat('总请求数: ', toString(count(*))) as \"详细信息\",\n  count(*) as \"请求总数\",\n  'nginx_comprehensive_monitoring_fixed' as \"跳转ID\"\nFROM nginx_analytics.dwd_nginx_enriched_v3 \nWHERE $__timeFilter(log_time)\n    AND $__conditionalAll(business_unit IN (${business_unit:singlequote}), $business_unit)\n    AND $__conditionalAll(environment IN (${environment:singlequote}), $environment)",
           "refId": "A"
         }
       ],
