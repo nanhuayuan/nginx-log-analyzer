@@ -1,36 +1,33 @@
 import os
-import pandas as pd
+import shutil
+import traceback
 from datetime import datetime
 
-#from self_01_api_analyzer import analyze_api_performance
 from self_01_api_analyzer_optimized import analyze_api_performance
-from self_00_01_constants import DEFAULT_LOG_DIR, DEFAULT_SUCCESS_CODES, DEFAULT_SLOW_THRESHOLD, DEFAULT_COLUMN_API, \
-    DEFAULT_START_DATE, DEFAULT_END_DATE
-#from self_06_performance_stability_analyzer import analyze_service_stability
+from self_02_service_analyzer_advanced import analyze_service_performance_advanced
+from self_03_slow_requests_analyzer_advanced import analyze_slow_requests_advanced
+from self_04_status_analyzer_advanced import analyze_status_codes
+from self_05_time_dimension_analyzer_advanced import analyze_time_dimension
 from self_06_performance_stability_analyzer_advanced import analyze_service_stability
-#from self_07_generate_summary_report_analyzer import generate_summary_report
 from self_07_generate_summary_report_analyzer_advanced import generate_summary_report
-#from self_08_ip_analyzer import analyze_ip_sources
 from self_08_ip_analyzer_advanced import analyze_ip_sources
-#from self_10_request_header_analyzer import analyze_request_headers
 from self_10_request_header_analyzer_advanced import analyze_request_headers
 from self_11_header_performance_analyzer import analyze_header_performance_correlation
 from self_13_interface_error_analyzer import analyze_interface_errors
 from self_00_03_log_parser import collect_log_files, process_log_files
-#from self_02_service_analyzer import analyze_service_performance
-from self_02_service_analyzer_advanced import analyze_service_performance_advanced
-#from self_03_slow_requests_analyzer import analyze_slow_requests
-from self_03_slow_requests_analyzer_advanced import analyze_slow_requests_advanced
-from self_04_status_analyzer_advanced import analyze_status_codes
-#from self_04_status_analyzer import analyze_status_codes
-#from self_05_time_dimension_analyzer import analyze_time_dimension
-from self_05_time_dimension_analyzer_advanced import analyze_time_dimension
+from self_00_01_constants import (
+    DEFAULT_LOG_DIR, DEFAULT_SUCCESS_CODES, DEFAULT_SLOW_THRESHOLD,
+    DEFAULT_COLUMN_API, DEFAULT_START_DATE, DEFAULT_END_DATE
+)
 from self_00_02_utils import log_info
 
 
 def main():
+    script_start_time = datetime.now()
+    temp_csv = None
+    temp_dir = None
+
     try:
-        script_start_time = datetime.now()
         log_info(f"开始执行Nginx日志分析任务 (版本: 1.0.0)", show_memory=True)
 
         # 设置输入和输出路径
@@ -68,11 +65,9 @@ def main():
         api_output = os.path.join(output_dir, "01.接口性能分析.xlsx")
         service_output = os.path.join(output_dir, "02.服务层级分析.xlsx")
         slow_output = os.path.join(output_dir, "03_慢请求分析.xlsx")
-
         status_output = os.path.join(output_dir, "04.状态码统计.xlsx")
         time_output = os.path.join(output_dir, "05.时间维度分析-全部接口.xlsx")
         specific_uri_time_output = os.path.join(output_dir, "05_01.时间维度分析-指定接口.xlsx")
-        #slow_requests_time_output = os.path.join(output_dir, "时间维度分析-指定接口.xlsx")
         stability_output = os.path.join(output_dir, "06_服务稳定性.xlsx")
         ip_analysis_output = os.path.join(output_dir, "08_IP来源分析.xlsx")
         header_analysis_output = os.path.join(output_dir, "10_请求头分析.xlsx")
@@ -80,23 +75,20 @@ def main():
         interface_error_output = os.path.join(output_dir, "13_接口错误分析.xlsx")
         summary_output = os.path.join(output_dir, "12_综合报告.xlsx")
 
-        # 定义基本分析任务
+        # 定义分析任务
         analysis_tasks = [
             {"name": "API性能分析", "func": analyze_api_performance, "args": {
                 "csv_path": temp_csv, "output_path": api_output,
                 "success_codes": DEFAULT_SUCCESS_CODES, "slow_threshold": DEFAULT_SLOW_THRESHOLD
             }},
-            #{"name": "服务层级分析", "func": analyze_service_performance, "args": {
             {"name": "服务层级分析", "func": analyze_service_performance_advanced, "args": {
                 "csv_path": temp_csv, "output_path": service_output,
                 "success_codes": DEFAULT_SUCCESS_CODES
             }},
-            #{"name": "慢请求分析", "func": analyze_slow_requests, "args": {
             {"name": "慢请求分析", "func": analyze_slow_requests_advanced, "args": {
                 "csv_path": temp_csv, "output_path": slow_output,
                 "slow_threshold": DEFAULT_SLOW_THRESHOLD
             }},
-            #{"name": "状态码统计", "func": analyze_status_codes, "args": {
             {"name": "状态码统计", "func": analyze_status_codes, "args": {
                 "csv_path": temp_csv, "output_path": status_output,
                 "slow_request_threshold": DEFAULT_SLOW_THRESHOLD
@@ -108,7 +100,6 @@ def main():
                 "csv_path": temp_csv, "output_path": specific_uri_time_output,
                 "specific_uri_list": DEFAULT_COLUMN_API
             }},
-
             {"name": "服务稳定性分析", "func": analyze_service_stability, "args": {
                 "csv_path": temp_csv, "output_path": stability_output
             }},
@@ -140,10 +131,8 @@ def main():
             if top_5_slowest is not None and not top_5_slowest.empty:
                 for i, row in top_5_slowest.iterrows():
                     slow_api = row['请求URI']
-                    # 截取URI，避免文件名过长
-                    safe_api_name = slow_api.replace("/", "_").replace("?", "_")[:30]
-                    specific_api_output = os.path.join(output_dir, f"05_02.时间维度分析-慢接口-{safe_api_name}.xlsx")
-
+                    safe_api_name = slow_api.replace("/", "_").replace("?", "_").replace("&", "_")[:30]
+                    specific_api_output = os.path.join(output_dir, f"05_02.时间维度分析-慢接口-{i}-{safe_api_name}.xlsx")
                     log_info(f"添加慢接口时间维度分析任务: {slow_api}")
                     analysis_tasks.append({
                         "name": f"特定接口时间维度分析 ({safe_api_name})",
@@ -170,10 +159,9 @@ def main():
                 result = task["func"](**task["args"])
 
             elapsed = (datetime.now() - start_time).total_seconds()
-
             log_info(f"完成分析: {task_name} (耗时: {elapsed:.2f} 秒)", show_memory=True)
 
-            # 保存结果到outputs
+            # 保存结果到outputs并打印摘要
             if task_name == "API性能分析":
                 outputs['slow_apis'] = result
                 if result is not None and not result.empty:
@@ -194,10 +182,11 @@ def main():
                 outputs['ip_analysis'] = result
                 if result is not None and not result.empty:
                     log_info(f"分析了 {len(result)} 个IP地址")
-                    # 显示前5个请求量最大的IP
                     log_info("IP请求量前5名：")
                     for idx, row in result.iterrows():
                         log_info(f"  {idx + 1}. {row['IP地址']} (请求数: {row['总请求数']}, 风险评分: {row['风险评分']})")
+                        if idx >= 4:
+                            break
             elif task_name == "请求头分析":
                 outputs['header_analysis'] = result
                 if result is not None and isinstance(result, dict):
@@ -217,14 +206,10 @@ def main():
                 if result is not None and isinstance(result, dict):
                     log_info(f"请求头性能关联分析完成：")
                     log_info(f"  整体慢请求率: {result.get('slow_rate_overall', 0)}%")
-                    
-                    # 显示性能最差的浏览器
                     if result.get('worst_browsers'):
                         log_info("  性能最差浏览器：")
                         for browser_info in result['worst_browsers'][:3]:
                             log_info(f"    - {browser_info['browser']}: 慢请求率 {browser_info['slow_rate']}%")
-                    
-                    # 显示优化建议
                     if result.get('performance_recommendations'):
                         log_info("  优化建议：")
                         for recommendation in result['performance_recommendations'][:3]:
@@ -236,27 +221,32 @@ def main():
                     log_info(f"  全局错误率: {result.get('error_rate', 0):.2f}%")
                     log_info(f"  错误接口数: {result.get('error_interfaces', 0)}")
                     log_info(f"  受影响客户端: {result.get('affected_clients', 0)} 个")
-                    
-                    # 显示Top错误接口
                     if result.get('top_error_interfaces'):
                         log_info("  Top错误接口：")
-                        for i, (interface, error_count) in enumerate(result['top_error_interfaces'][:3], 1):
-                            log_info(f"    {i}. {interface}: {error_count} 次错误")
+                        for j, (interface, error_count) in enumerate(result['top_error_interfaces'][:3], 1):
+                            log_info(f"    {j}. {interface}: {error_count} 次错误")
 
         # 生成综合报告
         log_info("生成综合报告...")
         generate_summary_report(outputs, summary_output)
 
-        # 清理临时文件
-        log_info("清理临时文件...")
-        os.remove(temp_csv)
-        log_info(f"已删除临时文件: {temp_csv}")
-
     except Exception as e:
         log_info(f"分析过程中发生错误: {str(e)}", level="ERROR")
-        import traceback
         log_info(traceback.format_exc(), level="ERROR")
     finally:
+        # 无论是否异常，都清理临时文件
+        if temp_csv and os.path.exists(temp_csv):
+            try:
+                os.remove(temp_csv)
+                log_info(f"已删除临时文件: {temp_csv}")
+            except Exception as e:
+                log_info(f"删除临时文件失败: {e}", level="WARNING")
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+                log_info(f"已删除临时目录: {temp_dir}")
+            except Exception as e:
+                log_info(f"删除临时目录失败: {e}", level="WARNING")
         log_info("分析任务结束", level="INFO")
 
 
