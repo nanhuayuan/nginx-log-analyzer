@@ -69,10 +69,10 @@ class AdvancedStreamingApiAnalyzer:
             # 使用T-Digest进行响应时间分析
             'response_time_digest': TDigest(compression=100),
             
-            # 使用蓄水池采样保存样本
-            'response_time_reservoir': ReservoirSampler(500),
-            'body_size_reservoir': ReservoirSampler(500),
-            'bytes_size_reservoir': ReservoirSampler(500),
+            # 使用蓄水池采样保存样本（3000条确保P99误差<1%）
+            'response_time_reservoir': ReservoirSampler(3000),
+            'body_size_reservoir': ReservoirSampler(3000),
+            'bytes_size_reservoir': ReservoirSampler(3000),
             
             # 流式统计（用于精确计算均值、方差）
             'request_time_sum': 0.0,

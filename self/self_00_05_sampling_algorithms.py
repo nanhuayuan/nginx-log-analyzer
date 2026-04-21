@@ -56,28 +56,41 @@ class TDigest:
             self.add(value)
     
     def _compress(self):
-        """压缩centroids"""
-        if not self.centroids:
+        """压缩centroids — 基于等权重分桶的正确实现。
+
+        原实现有根本性逻辑 bug：else 分支永远不执行（compressed 始终为空），
+        导致所有 centroid 被合并成单个加权均值，P50=P90=P95=P99=均值。
+
+        修复方案：将累计权重均匀划分成 compression 个桶，每个桶内的 centroid
+        合并为一个加权均值 centroid，正确保留分布形态。
+        """
+        if not self.centroids or len(self.centroids) <= self.compression:
             return
-        
+
         # 按均值排序
         self.centroids.sort(key=lambda x: x[0])
-        
+
+        total_weight = sum(w for _, w in self.centroids)
+        target_weight = total_weight / self.compression  # 每个目标桶的权重阈值
+
         compressed = []
-        current_mean, current_weight = self.centroids[0]
-        
-        for mean, weight in self.centroids[1:]:
-            # 简化的合并逻辑
-            if len(compressed) < self.compression:
-                # 合并相邻的centroids
-                combined_weight = current_weight + weight
-                combined_mean = (current_mean * current_weight + mean * weight) / combined_weight
-                current_mean, current_weight = combined_mean, combined_weight
-            else:
-                compressed.append((current_mean, current_weight))
-                current_mean, current_weight = mean, weight
-        
-        compressed.append((current_mean, current_weight))
+        bucket_mean_sum = 0.0
+        bucket_weight = 0.0
+
+        for mean, weight in self.centroids:
+            bucket_mean_sum += mean * weight
+            bucket_weight += weight
+
+            # 达到目标权重时输出当前桶（保留最后一桶收尾）
+            if bucket_weight >= target_weight and len(compressed) < self.compression - 1:
+                compressed.append((bucket_mean_sum / bucket_weight, bucket_weight))
+                bucket_mean_sum = 0.0
+                bucket_weight = 0.0
+
+        # 剩余数据作为最后一个桶
+        if bucket_weight > 0:
+            compressed.append((bucket_mean_sum / bucket_weight, bucket_weight))
+
         self.centroids = compressed
     
     def percentile(self, p: float) -> float:
