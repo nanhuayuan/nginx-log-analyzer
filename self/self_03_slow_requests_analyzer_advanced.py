@@ -1269,10 +1269,10 @@ class AdvancedSlowRequestAnalyzer:
             log_info(f"峰值内存: {max_memory}")
         
         log_info("=== 优化效果 ===")
-        log_info("• 单次扫描，减少50%磁盘IO")
-        log_info("• 智能采样，内存使用降低90%+")
-        log_info("• 根因分析，提供针对性优化建议")
-        log_info("• 精简列结构，提升分析效率")
+        log_info("- 单次扫描，减少50%磁盘IO")
+        log_info("- 智能采样，内存使用降低90%+")
+        log_info("- 根因分析，提供针对性优化建议")
+        log_info("- 精简列结构，提升分析效率")
 
 
 def analyze_slow_requests_advanced(csv_path: str, output_path: str, 

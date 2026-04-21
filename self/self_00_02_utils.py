@@ -10,6 +10,7 @@ from datetime import datetime
 
 def log_info(message, show_memory=False, level="INFO"):
     """输出日志信息，可选显示内存使用情况"""
+    import sys
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     memory_info = ""
     if show_memory:
@@ -17,7 +18,13 @@ def log_info(message, show_memory=False, level="INFO"):
         memory_usage_mb = process.memory_info().rss / 1024 / 1024
         memory_info = f" [内存: {memory_usage_mb:.2f} MB]"
 
-    print(f"[{timestamp}] [{level}]{memory_info} {message}")
+    line = f"[{timestamp}] [{level}]{memory_info} {message}"
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        # Windows GBK 终端无法输出部分 Unicode 字符，降级为替换模式
+        safe_line = line.encode(sys.stdout.encoding or 'gbk', errors='replace').decode(sys.stdout.encoding or 'gbk')
+        print(safe_line)
 
 
 def monitor_memory():

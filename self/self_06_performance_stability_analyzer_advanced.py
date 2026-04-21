@@ -202,7 +202,7 @@ class AdvancedPerformanceAnalyzer:
         
         # 创建时间桶
         if 'time' in chunk.columns:
-            chunk['hour_bucket'] = chunk['time'].dt.floor('H')
+            chunk['hour_bucket'] = chunk['time'].dt.floor('h')
             chunk['minute_bucket'] = chunk['time'].dt.floor('min')
         
         # 处理到达时间字段
